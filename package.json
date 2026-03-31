@@ -1,0 +1,5 @@
+{
+  "name": "kuratormind-ai",
+  "private": true,
+  "workspaces": ["apps/*"]
+}

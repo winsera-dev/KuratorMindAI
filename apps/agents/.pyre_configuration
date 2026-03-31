@@ -1,0 +1,13 @@
+{
+  "source_directories": [
+    "kuratormind"
+  ],
+  "search_path": [
+    ".venv/lib/python3.14/site-packages"
+  ],
+  "exclude": [
+    ".venv",
+    "kuratormind_agents.egg-info"
+  ],
+  "site_package_search_strategy": "pep561"
+}

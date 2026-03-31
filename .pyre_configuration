@@ -1,0 +1,15 @@
+{
+  "source_directories": [
+    "apps/agents"
+  ],
+  "search_path": [
+    "apps/agents/.venv/lib/python3.14/site-packages",
+    "apps/agents"
+  ],
+  "exclude": [
+    "apps/agents/.venv",
+    "node_modules",
+    "apps/web/node_modules"
+  ],
+  "site_package_search_strategy": "pep561"
+}
