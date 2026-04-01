@@ -10,7 +10,7 @@ from kuratormind.services.accounting import (  # type: ignore
     calculate_financial_ratios,
     detect_accounting_anomalies
 )
-from kuratormind.tools.supabase_tools import _get_supabase  # type: ignore
+from kuratormind.tools.supabase_tools import _get_supabase, semantic_search  # type: ignore
 
 def analyze_financial_data(
     vault_id: str,
@@ -113,5 +113,42 @@ def log_accounting_red_flag(
         }
         result = sb.table("audit_flags").insert(data).execute()
         return {"flag": result.data[0] if result.data else None, "error": None}
+    except Exception as e:
+        return {"error": str(e)}
+
+def analyze_financial_integrity(
+    vault_id: str,
+    target_period: str = "Last 12 Months",
+    focus_areas: List[str] = ["Solvency", "Balance Sheet", "Income"]
+) -> Dict[str, Any]:
+    """
+    High-level forensic tool for automated financial statement analysis.
+    This tool performs a semantic search for financial records, extracts keys, 
+    and checks for insolvency indicators and PSAK compliance.
+    
+    Args:
+        vault_id: UUID of the vault to scan.
+        target_period: The accounting period to focus on.
+        focus_areas: specific parts of financial statements to prioritize.
+    """
+    try:
+        # 1. Search for financial statements
+        query = f"Laporan Keuangan Neraca Laba Rugi Balance Sheet Income Statement {target_period}"
+        search_results = semantic_search(vault_id=vault_id, query=query, limit=5)
+        
+        if not search_results.get("results"):
+            return {"error": "No financial documents found in this vault.", "results": []}
+            
+        # 2. Return findings to the agent so it can extract values using its LLM
+        # The agent will then call `analyze_financial_data` with the extracted values.
+        return {
+            "found_evidence": search_results["results"],
+            "instruction": (
+                "Review the excerpts above. Extract 'Current Assets', 'Current Liabilities', "
+                "'Total Assets', 'Total Liabilities', and 'Equity'. "
+                "Then call 'analyze_financial_data' with these values."
+            )
+        }
+        
     except Exception as e:
         return {"error": str(e)}

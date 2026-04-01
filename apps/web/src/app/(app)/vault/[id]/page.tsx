@@ -21,21 +21,23 @@ import {
   ChevronRight,
   Bot,
 } from "lucide-react";
-import {
-  checkHealth,
-  deleteDocument,
+import { 
+  checkHealth, 
+  deleteDocument, 
+  getDocuments, 
+  uploadDocument, 
+  searchVault,
   getChatHistory,
-  getDocuments,
   streamChat,
-  uploadDocument,
   getDocumentSignedUrl,
-  type ChatMessage,
   type VaultDocument,
   type Citation,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ClaimsTab } from "@/components/vault/ClaimsTab";
 import { AuditTab } from "@/components/vault/AuditTab";
+import { DiscoveryTab } from "@/components/vault/DiscoveryTab";
+import { ForensicSidebar } from "@/components/vault/ForensicSidebar";
 import { type Claim } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -45,8 +47,9 @@ import { type Claim } from "@/types";
 const TABS = [
   { id: "sources", label: "Sources", Icon: FileText },
   { id: "chat", label: "Chat", Icon: MessageSquare },
+  { id: "search", label: "Discovery", Icon: Search },
   { id: "claims", label: "Claims", Icon: ClipboardList },
-  { id: "audit", label: "Audit", Icon: Search },
+  { id: "audit", label: "Audit", Icon: ClipboardList },
   { id: "outputs", label: "Outputs", Icon: FileOutput },
 ] as const;
 
@@ -64,10 +67,7 @@ export default function VaultWorkspace({
   const { id: vaultId } = use(params);
   const [activeTab, setActiveTab] = useState<TabId>("chat");
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
-  const [selectedCitation, setSelectedCitation] = useState<{
-    citation: Citation;
-    index: number;
-  } | null>(null);
+  const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
 
   // Health polling with 2-strike tolerance (prevents flicker during reloads)
   const failCountRef = useRef(0);
@@ -168,7 +168,16 @@ export default function VaultWorkspace({
           <div className="h-full">
             <ChatTab
               vaultId={vaultId}
-              onViewSource={(citation, index) => setSelectedCitation({ citation, index })}
+              onViewSource={(citation) => setSelectedEvidence(citation)}
+            />
+          </div>
+        )}
+
+        {activeTab === "search" && (
+          <div className="h-full px-8 py-10 bg-primary overflow-y-auto">
+            <DiscoveryTab 
+                vaultId={vaultId} 
+                onViewEvidence={(ev) => setSelectedEvidence(ev)} 
             />
           </div>
         )}
@@ -178,18 +187,12 @@ export default function VaultWorkspace({
             <ClaimsTab 
               vaultId={vaultId} 
               onViewEvidence={(claim) => {
-                // For now, if there's evidence, we show the first supporting document
                 if (claim.supporting_documents && claim.supporting_documents.length > 0) {
-                  const docId = claim.supporting_documents[0];
-                  // Use a placeholder citation to trigger the SourceDrawer
-                  setSelectedCitation({
-                    citation: {
-                      chunk_id: "",
-                      document_id: docId,
-                      page: 1,
-                      text_snippet: `Evidence for claim by ${claim.creditor_name}`,
-                    },
-                    index: 0
+                  setSelectedEvidence({
+                    document_id: claim.supporting_documents[0],
+                    file_name: claim.creditor_name,
+                    page: 1,
+                    text_snippet: `Evidence for claim of ${claim.creditor_name}`
                   });
                 }
               }}
@@ -201,22 +204,18 @@ export default function VaultWorkspace({
           <div className="h-full px-6 py-6 bg-primary overflow-y-auto">
             <AuditTab 
               vaultId={vaultId} 
-              onViewEvidence={(citation) => {
-                setSelectedCitation({ citation, index: 0 });
-              }}
+              onViewEvidence={(ev) => setSelectedEvidence(ev)}
             />
           </div>
         )}
         {activeTab === "outputs" && <PlaceholderTab name="Outputs" phase="1C" Icon={FileOutput} />}
       </main>
 
-      {/* Source Drawer */}
-      {selectedCitation && (
-        <SourceDrawer
-          isOpen={!!selectedCitation}
-          citation={selectedCitation.citation}
-          index={selectedCitation.index}
-          onClose={() => setSelectedCitation(null)}
+      {/* Forensic Sidebar (Drill-down) */}
+      {selectedEvidence && (
+        <ForensicSidebar
+          evidence={selectedEvidence}
+          onClose={() => setSelectedEvidence(null)}
         />
       )}
     </div>

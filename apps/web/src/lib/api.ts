@@ -41,6 +41,20 @@ export interface ChatHistoryResponse {
   messages: ChatMessage[];
 }
 
+export interface SearchResponse {
+  results: Array<{
+    id: string;
+    content: string;
+    document_id: string;
+    file_name: string;
+    page_number?: number;
+    similarity_score?: number;
+  }>;
+  count: number;
+  query: string;
+  fallback: boolean;
+}
+
 export interface StreamEvent {
   event: "agent_status" | "token" | "done" | "error";
   data: {
@@ -231,6 +245,32 @@ export async function updateAuditFlag(
   });
   if (!res.ok) throw new Error("Failed to update audit flag");
   return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Search API
+// ---------------------------------------------------------------------------
+
+/**
+ * Perform a semantic search across a vault's documents.
+ */
+export async function searchVault(
+  vaultId: string, 
+  query: string, 
+  topK: number = 10
+): Promise<SearchResponse> {
+  const res = await fetch(`${BASE_URL}/api/v1/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ vault_id: vaultId, query, top_k: topK }),
+  });
+  
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Search failed");
+  }
+  
+  return res.json() as Promise<SearchResponse>;
 }
 
 // ---------------------------------------------------------------------------
