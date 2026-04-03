@@ -301,24 +301,38 @@ def ingest_document(
         # 8. Generate summary
         summary = _generate_summary(full_text, file_name)
 
-        # 9. Mark document as ready
+        # 9. Update status to processing for Audit phase
         sb.table("vault_documents").update(
             {
-                "status": "ready",
-                "summary": summary,
+                "status": "processing",
+                "summary": "Analysing document for forensic claims and audit flags...",
                 "page_count": page_count,
             }
         ).eq("id", document_id).execute()
 
-        logger.info("Ingestion complete for %s (%d chunks)", document_id, len(chunks))
+        logger.info("Starting forensic phase for %s", document_id)
         
         # 10. Trigger Claim Audit (Forensic review)
-        _trigger_claim_audit(vault_id, document_id, file_name)
+        try:
+            _trigger_claim_audit(vault_id, document_id, file_name)
+        except Exception as e:
+            logger.error("Claim audit failed: %s", e)
         
         # 11. Trigger Financial Audit (if applicable)
         is_financial = any(x in file_name.lower() for x in ["neraca", "laba rugi", "balance sheet", "p&l", "financial"])
         if is_financial:
-            _trigger_financial_audit(vault_id, document_id, file_name)
+            try:
+                _trigger_financial_audit(vault_id, document_id, file_name)
+            except Exception as e:
+                logger.error("Financial audit failed: %s", e)
+
+        # 12. Finalize status to ready
+        sb.table("vault_documents").update(
+            {
+                "status": "ready",
+                "summary": summary,
+            }
+        ).eq("id", document_id).execute()
 
         return {"success": True, "chunks_created": len(chunks)}
 

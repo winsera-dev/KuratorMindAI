@@ -21,7 +21,6 @@ export interface Vault {
   debtor_entity?: string;
   case_number?: string;
   court_name?: string;
-  bankruptcy_date?: string;
   stage_started_at?: string;
   stage: VaultStage;
   status: VaultStatus;

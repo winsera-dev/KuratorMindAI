@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 
 interface AuditTabProps {
   vaultId: string;
+  isScanningOverride?: boolean;
   onViewEvidence?: (citation: Citation) => void;
 }
 
@@ -26,7 +27,7 @@ interface AuditTabProps {
  * Audit Tab Workspace
  * Orchestrates forensic flags, contradictions, and legal monitoring.
  */
-export function AuditTab({ vaultId, onViewEvidence }: AuditTabProps) {
+export function AuditTab({ vaultId, isScanningOverride, onViewEvidence }: AuditTabProps) {
   const [flags, setFlags] = useState<AuditFlag[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -35,13 +36,22 @@ export function AuditTab({ vaultId, onViewEvidence }: AuditTabProps) {
   const [severityFilter, setSeverityFilter] = useState<string | null>("critical");
   const [showResolved, setShowResolved] = useState(false);
 
+  // Sync internal scanning state with override
+  useEffect(() => {
+    if (isScanningOverride !== undefined) {
+      setIsScanning(isScanningOverride);
+    }
+  }, [isScanningOverride]);
+
   const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
-      // 1. Check for processing documents in this vault
-      const docsData = await getDocuments(vaultId);
-      const processing = docsData.documents.some(d => d.status === "pending" || d.status === "processing");
-      setIsScanning(processing);
+      // 1. Check for processing documents in this vault (if not overridden)
+      if (isScanningOverride === undefined) {
+        const docsData = await getDocuments(vaultId);
+        const processing = docsData.documents.some(d => d.status === "pending" || d.status === "processing");
+        setIsScanning(processing);
+      }
 
       // 2. Fetch flags
       const data = await getAuditFlags(vaultId, severityFilter || undefined);

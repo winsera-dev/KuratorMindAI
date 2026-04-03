@@ -63,16 +63,19 @@ export default function VaultCard({ vault }: VaultCardProps) {
     >
       {/* Top Row: Case Metadata */}
       <div className="flex items-start justify-between mb-4">
-        <div className="space-y-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+        <div className="space-y-1 min-w-0">
+          <span className="text-[10px] font-black uppercase tracking-widest text-text-muted opacity-60">
             Case #{vault.case_number || "PENDING"}
           </span>
-          <h3 className="text-xl font-bold group-hover:text-accent-blue transition-colors">
-            {vault.debtor_entity || vault.name}
+          <h3 className="text-lg font-black group-hover:text-accent-blue transition-colors truncate">
+            {vault.name}
           </h3>
+          <p className="text-[11px] text-text-secondary font-bold uppercase tracking-tight truncate opacity-80">
+            {vault.debtor_entity || "Undisclosed Entity"}
+          </p>
         </div>
-        <div className="w-10 h-10 rounded-xl bg-bg-elevated flex items-center justify-center text-text-muted group-hover:text-accent-blue transition-colors">
-          <ExternalLink className="w-5 h-5" />
+        <div className="w-10 h-10 rounded-xl bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-muted group-hover:text-accent-blue group-hover:bg-accent-blue/5 transition-all shrink-0">
+          <Scale className="w-5 h-5" />
         </div>
       </div>
 

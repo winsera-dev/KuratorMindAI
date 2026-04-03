@@ -20,6 +20,7 @@ import {
   Loader2,
   ChevronRight,
   Bot,
+  Pencil,
 } from "lucide-react";
 import { 
   checkHealth, 
@@ -42,6 +43,7 @@ import { CrossVaultTab } from "@/components/vault/CrossVaultTab";
 import { OutputsTab } from "@/components/vault/OutputsTab";
 import { ForensicSidebar } from "@/components/vault/ForensicSidebar";
 import { VaultStatusBadge } from "@/components/vault/VaultStatusBadge";
+import { EditVaultModal } from "@/components/vault/EditVaultModal";
 import { type Claim, type Vault } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -74,9 +76,21 @@ export default function VaultWorkspace({
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
   const [vault, setVault] = useState<Vault | null>(null);
+  const [isVaultScanning, setIsVaultScanning] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  // Health polling with 2-strike tolerance (prevents flicker during reloads)
+  // Health polling
   const failCountRef = useRef(0);
+
+  const checkVaultStatus = useCallback(async () => {
+    try {
+      const docsData = await getDocuments(vaultId);
+      const scanning = docsData.documents.some(d => d.status === "pending" || d.status === "processing");
+      setIsVaultScanning(scanning);
+    } catch (err) {
+      console.error("Status check failed:", err);
+    }
+  }, [vaultId]);
 
   useEffect(() => {
     const poll = async () => {
@@ -86,21 +100,20 @@ export default function VaultWorkspace({
         setBackendOnline(true);
       } else {
         failCountRef.current += 1;
-        // Only mark offline after 2 consecutive failures
-        if (failCountRef.current >= 2) {
-          setBackendOnline(false);
-        }
+        if (failCountRef.current >= 2) setBackendOnline(false);
       }
+      
+      // Also check vault document status during health check
+      checkVaultStatus();
     };
 
-    poll(); // Check immediately
-    const interval = setInterval(poll, 10_000);
+    poll(); 
+    const interval = setInterval(poll, 5000); // More frequent during active workspace
 
-    // Initial vault fetch
     getVault(vaultId).then(setVault).catch(console.error);
 
     return () => clearInterval(interval);
-  }, [vaultId]);
+  }, [vaultId, checkVaultStatus]);
 
   return (
     <div className="h-screen flex flex-col bg-primary">
@@ -113,21 +126,28 @@ export default function VaultWorkspace({
           >
             <ArrowLeft size={18} />
           </Link>
-          <div>
-            <h1 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-              Vault — <span className="font-mono text-xs text-text-muted">{vaultId.slice(0, 8)}…</span>
-              {vault && (
-                <VaultStatusBadge 
-                  vault={vault} 
-                  onUpdate={setVault} 
-                />
-              )}
-            </h1>
-            <p className="text-xs text-text-muted">
-              {vault?.name || "KuratorMind AI Workspace"}
-            </p>
+            <div>
+              <h1 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+                Vault — <span className="font-mono text-xs text-text-muted">{vaultId.slice(0, 8)}…</span>
+                {vault && (
+                  <VaultStatusBadge 
+                    vault={vault} 
+                    readOnly={true}
+                  />
+                )}
+                <button
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="p-1.5 hover:bg-bg-elevated rounded-lg text-text-muted hover:text-accent-blue transition-all ml-1"
+                  title="Edit Case Intelligence"
+                >
+                  <Pencil size={14} />
+                </button>
+              </h1>
+              <p className="text-xs text-text-muted">
+                {vault?.name || "KuratorMind AI Workspace"}
+              </p>
+            </div>
           </div>
-        </div>
 
         <div className="flex items-center gap-3">
           {/* Backend status badge */}
@@ -202,6 +222,7 @@ export default function VaultWorkspace({
           <div className="h-full px-6 py-6 bg-primary overflow-y-auto">
             <ClaimsTab 
               vaultId={vaultId} 
+              isScanningOverride={isVaultScanning}
               onViewEvidence={(claim) => {
                 if (claim.supporting_documents && claim.supporting_documents.length > 0) {
                   setSelectedEvidence({
@@ -220,6 +241,7 @@ export default function VaultWorkspace({
           <div className="h-full px-6 py-6 bg-primary overflow-y-auto">
             <AuditTab 
               vaultId={vaultId} 
+              isScanningOverride={isVaultScanning}
               onViewEvidence={(ev: Citation) => setSelectedEvidence(ev)}
             />
           </div>
@@ -244,6 +266,16 @@ export default function VaultWorkspace({
         <ForensicSidebar
           evidence={selectedEvidence}
           onClose={() => setSelectedEvidence(null)}
+        />
+      )}
+
+      {/* Edit Vault Modal */}
+      {vault && (
+        <EditVaultModal
+          vault={vault}
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          onUpdate={setVault}
         />
       )}
     </div>
@@ -317,6 +349,20 @@ function SourcesTab({ vaultId }: { vaultId: string }) {
   };
 
   const handleDelete = async (docId: string) => {
+    const doc = documents.find(d => d.id === docId);
+    const fileName = doc?.file_name || "this document";
+
+    const confirmed = window.confirm(
+      `PERMANENT DELETION WARNING\n\n` +
+      `You are about to delete: ${fileName}\n\n` +
+      `This action will automatically PURGE all derived data from this vault, including:\n` +
+      `• All Creditor Claims extracted from this file\n` +
+      `• All Audit Flags and Contradictions linked to this evidence\n\n` +
+      `This is required to maintain the systemic integrity of the legal workspace. Do you wish to proceed?`
+    );
+
+    if (!confirmed) return;
+
     try {
       await deleteDocument(docId);
       setDocuments((prev) => prev.filter((d) => d.id !== docId));

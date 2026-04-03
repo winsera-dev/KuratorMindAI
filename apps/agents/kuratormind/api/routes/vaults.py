@@ -27,7 +27,6 @@ class VaultBase(BaseModel):
     debtor_entity: Optional[str] = None
     case_number: Optional[str] = None
     court_name: Optional[str] = None
-    bankruptcy_date: Optional[Any] = None
     stage_started_at: Optional[Any] = None
     stage: Optional[str] = "pkpu_temp"
 
@@ -41,7 +40,6 @@ class VaultResponse(BaseModel):
     debtor_entity: Optional[str] = None
     case_number: Optional[str] = None
     court_name: Optional[str] = None
-    bankruptcy_date: Optional[Any] = None
     stage_started_at: Optional[Any] = None
     stage: Optional[str] = None
     user_id: Optional[str] = None
@@ -94,8 +92,6 @@ async def create_vault(vault: VaultCreate):
     
     vault_data = vault.dict()
     # Pydantic date to string for JSON serialization
-    if vault_data.get("bankruptcy_date"):
-        vault_data["bankruptcy_date"] = vault_data["bankruptcy_date"].isoformat()
     if vault_data.get("stage_started_at"):
         vault_data["stage_started_at"] = vault_data["stage_started_at"].isoformat()
         
@@ -140,7 +136,7 @@ async def update_vault(vault_id: str, updates: dict):
     
     # Handle date serialization if present in updates
     # Ensure they are valid ISO strings for Postgres
-    for key in ["bankruptcy_date", "stage_started_at"]:
+    for key in ["stage_started_at"]:
         if key in updates and updates[key]:
             val = updates[key]
             # Convert simple date 'YYYY-MM-DD' to 'YYYY-MM-DD 00:00:00' for timestamp compatibility

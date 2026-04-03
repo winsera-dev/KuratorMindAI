@@ -12,6 +12,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import CreateVaultModal from "@/components/modals/CreateVaultModal";
 import VaultCard from "@/components/VaultCard";
+import { getVaults } from "@/lib/api";
 
 export default function DashboardPage() {
   const [vaults, setVaults] = useState<any[]>([]);
@@ -31,16 +32,11 @@ export default function DashboardPage() {
       if (!session?.user) return;
       
       setUserId(session.user.id);
-
-      const { data, error } = await supabase
-        .from("vaults")
-        .select("*")
-        .order("updated_at", { ascending: false });
-
-      if (error) throw error;
+      
+      const data = await getVaults();
       setVaults(data || []);
-    } catch (err) {
-      console.error("Error fetching vaults:", err);
+    } catch (err: any) {
+      console.error("Error fetching vaults:", err.message || err);
     } finally {
       setLoading(false);
     }

@@ -181,6 +181,7 @@ async def delete_document(document_id: str):
             raise HTTPException(status_code=404, detail="Document not found.")
 
         storage_path = doc.data.get("file_path")
+        vault_id = doc.data.get("vault_id")
 
         # Delete chunks
         sb.table("document_chunks").delete().eq("document_id", document_id).execute()
@@ -195,17 +196,17 @@ async def delete_document(document_id: str):
             
             # 2. Robust Cleanup for Audit Flags
             # We fetch all flags for the vault and manually filter in Python to be 100% sure
-            # This avoids issues with the 'cs' (contains) filter on JSONB arrays
-            flags_res = sb.table("audit_flags").select("id, evidence").eq("vault_id", vault_id).execute()
-            for f in flags_res.data:
-                evidence = f.get("evidence") or []
-                # Check if any evidence item links to this document
-                is_linked = any(
-                    isinstance(e, dict) and e.get("source_document_id") == document_id 
-                    for e in evidence
-                )
-                if is_linked:
-                    sb.table("audit_flags").delete().eq("id", f["id"]).execute()
+            if vault_id:
+                flags_res = sb.table("audit_flags").select("id, evidence").eq("vault_id", vault_id).execute()
+                for f in flags_res.data:
+                    evidence = f.get("evidence") or []
+                    # Check if any evidence item links to this document
+                    is_linked = any(
+                        isinstance(e, dict) and e.get("source_document_id") == document_id 
+                        for e in evidence
+                    )
+                    if is_linked:
+                        sb.table("audit_flags").delete().eq("id", f["id"]).execute()
             
             logger.info("Systemic cleanup complete for document %s", document_id)
         except Exception as cleanup_exc:
