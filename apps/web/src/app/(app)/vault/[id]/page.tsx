@@ -117,58 +117,83 @@ export default function VaultWorkspace({
 
   return (
     <div className="h-screen flex flex-col bg-primary">
-      {/* Top Bar */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-border-default bg-secondary">
-        <div className="flex items-center gap-3">
+      {/* Case Header: Command Center Style */}
+      <header className="flex h-16 items-center justify-between px-6 border-b border-border-default bg-secondary/80 backdrop-blur-md sticky top-0 z-40">
+        <div className="flex items-center gap-4">
+          {/* Breadcrumb Navigation */}
           <Link
             href="/"
-            className="text-text-muted hover:text-text-primary transition-colors"
+            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-text-muted hover:text-text-primary transition-all group"
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+            Dashboard
           </Link>
-            <div>
-              <h1 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-                Vault — <span className="font-mono text-xs text-text-muted">{vaultId.slice(0, 8)}…</span>
+          
+          <div className="h-4 w-px bg-border-subtle" />
+
+          {/* Case Identity */}
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col justify-center leading-none">
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-black uppercase tracking-tight text-text-primary flex items-center gap-2">
+                  {vault?.debtor_entity || vault?.name || "Initializing workspace..."}
+                </h1>
                 {vault && (
-                  <VaultStatusBadge 
-                    vault={vault} 
-                    readOnly={true}
-                  />
+                  <div className="flex items-center gap-1.5 ml-1">
+                    <VaultStatusBadge vault={vault} readOnly={true} />
+                    <button
+                      onClick={() => setIsEditModalOpen(true)}
+                      className="p-1.5 hover:bg-bg-elevated rounded-lg text-text-muted hover:text-accent-blue transition-all"
+                      title="Edit Case Intelligence"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  </div>
                 )}
-                <button
-                  onClick={() => setIsEditModalOpen(true)}
-                  className="p-1.5 hover:bg-bg-elevated rounded-lg text-text-muted hover:text-accent-blue transition-all ml-1"
-                  title="Edit Case Intelligence"
-                >
-                  <Pencil size={14} />
-                </button>
-              </h1>
-              <p className="text-xs text-text-muted">
-                {vault?.name || "KuratorMind AI Workspace"}
-              </p>
+              </div>
+              
+              {vault?.case_number && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] font-mono font-bold text-text-muted opacity-60 flex items-center gap-1 uppercase tracking-wider">
+                    <Hash size={10} />
+                    {vault.case_number}
+                  </span>
+                  <span className="h-1 w-1 rounded-full bg-border-default" />
+                  <span className="text-[9px] font-bold text-text-muted opacity-40 uppercase tracking-widest">
+                    ID: {vaultId.slice(0, 8)}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
+        </div>
 
-        <div className="flex items-center gap-3">
-          {/* Backend status badge */}
+        <div className="flex items-center gap-4">
+          {/* Backend Agent Status: Isolated to right */}
           <div className={cn(
-            "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
+            "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all duration-500",
             backendOnline === null
-              ? "bg-elevated border-border-default text-text-muted"
+              ? "bg-bg-secondary border-border-default text-text-muted"
               : backendOnline
-              ? "bg-accent-emerald/10 border-accent-emerald/20 text-accent-emerald"
+              ? "bg-accent-emerald/5 border-accent-emerald/20 text-accent-emerald shadow-[0_0_15px_-5px_rgba(16,185,129,0.2)]"
               : "bg-accent-rose/10 border-accent-rose/20 text-accent-rose"
           )}>
-            <span className={cn(
-              "w-1.5 h-1.5 rounded-full",
-              backendOnline === null ? "bg-current opacity-50" :
-              backendOnline ? "bg-accent-emerald agent-working" :
-              "bg-accent-rose"
-            )} />
-            {backendOnline === null ? "Checking…" : backendOnline ? "Agent Online" : "Agent Offline"}
+            <div className="relative flex h-1.5 w-1.5">
+              {backendOnline && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-emerald opacity-75"></span>
+              )}
+              <span className={cn(
+                "relative inline-flex rounded-full h-1.5 w-1.5",
+                backendOnline === null ? "bg-text-muted" :
+                backendOnline ? "bg-accent-emerald agent-working" :
+                "bg-accent-rose"
+              )}></span>
+            </div>
+            {backendOnline === null ? "Syncing..." : backendOnline ? "Agent Online" : "Agent Offline"}
           </div>
-          <div className="w-8 h-8 rounded-full bg-elevated border border-border-default flex items-center justify-center text-sm font-medium text-text-secondary">
-            K
+
+          <div className="h-8 w-8 rounded-full bg-bg-elevated border border-border-default flex items-center justify-center text-[11px] font-black text-text-secondary uppercase">
+            {vault?.name?.slice(0, 1) || "K"}
           </div>
         </div>
       </header>

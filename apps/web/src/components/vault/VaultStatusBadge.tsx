@@ -47,24 +47,24 @@ export function VaultStatusBadge({ vault, onUpdate, readOnly = false }: VaultSta
         currentStage.color === "emerald" && "bg-accent-emerald/10 border-accent-emerald/20 text-accent-emerald"
       )}
     >
-      <currentStage.Icon size={14} className={cn(readOnly ? "" : "agent-working")} />
-      <div className="flex flex-col items-start leading-none">
-        <span className="text-[9px] font-black uppercase tracking-widest opacity-60">
-          Case Stage
+      <currentStage.Icon size={12} className={cn(readOnly ? "" : "agent-working")} />
+      <div className="flex flex-col items-start leading-none gap-0.5">
+        <span className="text-[8px] font-black uppercase tracking-[0.15em] opacity-50">
+          Stage
         </span>
-        <span className="text-[11px] font-black flex items-center gap-1 uppercase tracking-tight">
+        <span className="text-[10px] font-black flex items-center gap-1 uppercase tracking-tight">
           {currentStage.label.split(' (')[0]}
-          {!readOnly && <ChevronDown size={10} className="opacity-50 group-hover:opacity-100 transition-opacity" />}
+          {!readOnly && <ChevronDown size={8} className="opacity-40" />}
         </span>
       </div>
       
       {vault.stage_started_at && (
-        <div className="ml-2 pl-2 border-l border-current/20 flex flex-col items-start leading-none">
-          <span className="text-[9px] font-black uppercase tracking-widest opacity-60">
-            Started At
+        <div className="ml-1.5 pl-1.5 border-l border-current/20 flex flex-col items-start leading-none gap-0.5">
+          <span className="text-[8px] font-black uppercase tracking-[0.15em] opacity-50">
+            Since
           </span>
-          <span className="text-[11px] font-black whitespace-nowrap uppercase tracking-tight">
-            {new Date(vault.stage_started_at).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+          <span className="text-[10px] font-black whitespace-nowrap uppercase tracking-tight">
+            {new Date(vault.stage_started_at).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
           </span>
         </div>
       )}
