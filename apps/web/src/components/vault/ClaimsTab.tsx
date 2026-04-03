@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { getClaims, updateClaim } from "@/lib/api";
+import { getClaims, updateClaim, getDocuments } from "@/lib/api";
 import { Claim, ClaimStatus } from "@/types";
 import { ClaimsTable } from "./ClaimsTable";
 import { 
@@ -12,7 +12,8 @@ import {
   Download, 
   ShieldCheck, 
   TrendingUp, 
-  Calculator 
+  Calculator,
+  Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,12 +30,19 @@ export function ClaimsTab({ vaultId, onViewEvidence }: ClaimsTabProps) {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
   const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
+      // 1. Check for processing documents in this vault
+      const docsData = await getDocuments(vaultId);
+      const processing = docsData.documents.some(d => d.status === "pending" || d.status === "processing");
+      setIsScanning(processing);
+
+      // 2. Fetch claims
       const data = await getClaims(vaultId);
       setClaims(data.claims);
       setError(null);
@@ -49,7 +57,14 @@ export function ClaimsTab({ vaultId, onViewEvidence }: ClaimsTabProps) {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+
+    // Set up polling if scanning is active
+    let interval: NodeJS.Timeout;
+    if (isScanning) {
+      interval = setInterval(() => fetchData(true), 3000);
+    }
+    return () => clearInterval(interval);
+  }, [fetchData, isScanning]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -92,16 +107,16 @@ export function ClaimsTab({ vaultId, onViewEvidence }: ClaimsTabProps) {
       {/* 1. Forensic Header Stats */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="bg-card p-5 rounded-2xl border border-border-default shadow-sm hover:shadow-md transition-shadow group">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
               <p className="text-xs font-bold text-text-muted uppercase tracking-wider">Total Claims Value</p>
-              <h3 className="text-2xl font-black text-accent-blue tracking-tight">
-                {formatCurrency(stats.amount)}
-              </h3>
+              <div className="shrink-0 p-2.5 rounded-xl bg-accent-blue/10 text-accent-blue group-hover:scale-110 transition-transform">
+                <Calculator size={20} />
+              </div>
             </div>
-            <div className="p-2.5 rounded-xl bg-accent-blue/10 text-accent-blue group-hover:scale-110 transition-transform">
-              <Calculator size={20} />
-            </div>
+            <h3 className="text-xl md:text-2xl font-black text-accent-blue tracking-tight break-all leading-tight">
+              {formatCurrency(stats.amount)}
+            </h3>
           </div>
           <div className="mt-4 pt-4 border-t border-border-default/50 flex items-center justify-between">
             <span className="text-[10px] font-bold text-text-muted uppercase tracking-tight">Verification Progress</span>
@@ -112,16 +127,16 @@ export function ClaimsTab({ vaultId, onViewEvidence }: ClaimsTabProps) {
         </div>
 
         <div className="bg-card p-5 rounded-2xl border border-border-default shadow-sm hover:shadow-md transition-shadow group">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
               <p className="text-xs font-bold text-text-muted uppercase tracking-wider">Claim Summary</p>
-              <h3 className="text-2xl font-black text-text-primary tracking-tight">
-                {stats.total} <span className="text-sm font-medium text-text-muted">CREDITORS</span>
-              </h3>
+              <div className="shrink-0 p-2.5 rounded-xl bg-secondary text-text-muted group-hover:scale-110 transition-transform">
+                <Search size={20} />
+              </div>
             </div>
-            <div className="p-2.5 rounded-xl bg-secondary text-text-muted group-hover:scale-110 transition-transform">
-              <Search size={20} />
-            </div>
+            <h3 className="text-xl md:text-2xl font-black text-text-primary tracking-tight leading-tight">
+              {stats.total} <span className="text-sm font-medium text-text-muted">CREDITORS</span>
+            </h3>
           </div>
           <div className="mt-4 pt-4 border-t border-border-default/50 flex items-center justify-between">
             <span className="text-[10px] font-bold text-text-muted uppercase tracking-tight">Verified Creditors</span>
@@ -132,24 +147,24 @@ export function ClaimsTab({ vaultId, onViewEvidence }: ClaimsTabProps) {
         </div>
 
         <div className="bg-card p-5 rounded-2xl border border-border-default shadow-sm hover:shadow-md transition-shadow group">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
               <p className="text-xs font-bold text-text-muted uppercase tracking-wider">AI Forensic Score</p>
-              <h3 className={cn(
-                "text-2xl font-black tracking-tight",
-                stats.confidenceAvg > 80 ? "text-accent-emerald" :
-                stats.confidenceAvg > 50 ? "text-accent-amber" : "text-accent-rose"
+              <div className={cn(
+                "shrink-0 p-2.5 rounded-xl group-hover:scale-110 transition-transform",
+                stats.confidenceAvg > 80 ? "bg-accent-emerald/10 text-accent-emerald" :
+                stats.confidenceAvg > 50 ? "bg-accent-amber/10 text-accent-amber" : "bg-accent-rose/10 text-accent-rose"
               )}>
-                {Math.round(stats.confidenceAvg)}% <span className="text-sm font-medium text-text-muted">CERTAINTY</span>
-              </h3>
+                <ShieldCheck size={20} />
+              </div>
             </div>
-            <div className={cn(
-              "p-2.5 rounded-xl group-hover:scale-110 transition-transform",
-              stats.confidenceAvg > 80 ? "bg-accent-emerald/10 text-accent-emerald" :
-              stats.confidenceAvg > 50 ? "bg-accent-amber/10 text-accent-amber" : "bg-accent-rose/10 text-accent-rose"
+            <h3 className={cn(
+              "text-xl md:text-2xl font-black tracking-tight leading-tight",
+              stats.confidenceAvg > 80 ? "text-accent-emerald" :
+              stats.confidenceAvg > 50 ? "text-accent-amber" : "text-accent-rose"
             )}>
-              <ShieldCheck size={20} />
-            </div>
+              {Math.round(stats.confidenceAvg)}% <span className="text-sm font-medium text-text-muted">CERTAINTY</span>
+            </h3>
           </div>
           <div className="mt-4 pt-4 border-t border-border-default/50 flex items-center justify-between">
             <span className="text-[10px] font-bold text-text-muted uppercase tracking-tight">Confidence Accuracy</span>
@@ -162,6 +177,34 @@ export function ClaimsTab({ vaultId, onViewEvidence }: ClaimsTabProps) {
       </section>
 
       {/* 2. Workspace Controls */}
+      {isScanning && (
+        <div className="bg-accent-blue/5 border border-accent-blue/20 rounded-2xl p-6 flex items-center justify-between animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="p-3 bg-accent-blue/10 rounded-xl text-accent-blue relative z-10">
+                <Zap size={24} className="animate-pulse" />
+              </div>
+              <div className="absolute inset-0 bg-accent-blue/20 blur-xl animate-pulse rounded-full" />
+            </div>
+            <div>
+              <p className="text-base font-black text-text-primary uppercase tracking-tight">AI Claim Extraction Active</p>
+              <p className="text-sm text-text-muted font-medium mt-0.5">
+                Automatically mapping creditors and verifying debt classifications
+                <span className="inline-flex ml-2">
+                  <span className="animate-[bounce_1s_infinite_100ms]">.</span>
+                  <span className="animate-[bounce_1s_infinite_200ms]">.</span>
+                  <span className="animate-[bounce_1s_infinite_300ms]">.</span>
+                </span>
+              </p>
+            </div>
+          </div>
+          <div className="hidden md:flex flex-col items-end text-right">
+            <span className="text-[10px] font-black text-accent-blue uppercase tracking-widest bg-accent-blue/10 px-2 py-1 rounded-md">High-Speed Ingestion</span>
+            <span className="text-[9px] text-text-muted font-bold mt-1 italic">Structured data will appear below</span>
+          </div>
+        </div>
+      )}
+
       <section className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3 flex-1 min-w-[280px]">
           <div className="relative flex-1 group">
@@ -222,6 +265,7 @@ export function ClaimsTab({ vaultId, onViewEvidence }: ClaimsTabProps) {
         <ClaimsTable 
           claims={filteredClaims} 
           loading={loading}
+          isScanning={isScanning}
           onUpdateStatus={handleUpdateStatus}
           onViewEvidence={onViewEvidence}
         />

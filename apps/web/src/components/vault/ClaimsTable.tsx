@@ -15,12 +15,14 @@ import {
   FileSearch2, 
   ShieldCheck, 
   ShieldAlert, 
-  Banknote 
+  Banknote,
+  Fingerprint,
 } from "lucide-react";
 
 interface ClaimsTableProps {
   claims: Claim[];
   loading?: boolean;
+  isScanning?: boolean;
   onUpdateStatus?: (claimId: string, status: ClaimStatus) => void;
   onViewEvidence?: (claim: Claim) => void;
 }
@@ -32,6 +34,7 @@ interface ClaimsTableProps {
 export function ClaimsTable({ 
   claims, 
   loading, 
+  isScanning,
   onUpdateStatus, 
   onViewEvidence 
 }: ClaimsTableProps) {
@@ -58,7 +61,7 @@ export function ClaimsTable({
     }).format(amount);
   };
 
-  if (loading) {
+  if (loading && !isScanning) {
     return (
       <div className="space-y-4 animate-pulse">
         {[1, 2, 3].map((i) => (
@@ -69,6 +72,23 @@ export function ClaimsTable({
   }
 
   if (claims.length === 0) {
+    if (isScanning) {
+      return (
+        <div className="grid grid-cols-1 gap-6">
+          {[1, 2].map((i) => (
+            <div key={i} className="h-32 bg-card/50 border border-dashed border-border-subtle rounded-2xl flex items-center justify-center">
+              <div className="flex items-center gap-4 opacity-20">
+                <div className="w-12 h-12 rounded-xl bg-accent-blue/20 animate-pulse" />
+                <div className="space-y-2">
+                  <div className="w-48 h-3 bg-text-muted rounded animate-pulse" />
+                  <div className="w-32 h-2 bg-text-muted/50 rounded animate-pulse" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
     return (
       <div className="h-64 flex flex-col items-center justify-center text-center space-y-3 bg-card/30 rounded-2xl border border-dashed border-border-default">
         <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center">
@@ -127,9 +147,23 @@ export function ClaimsTable({
                     <tr key={claim.id} className="group hover:bg-elevated/50 transition-colors">
                       <td className="px-5 py-4">
                         <div className="font-semibold text-text-primary text-sm line-clamp-1">{claim.creditor_name}</div>
-                        <div className="text-[11px] text-text-muted mt-1 opacity-70 flex items-center gap-1.5 font-medium uppercase tracking-tight">
-                          <ShieldCheck size={11} className="text-accent-emerald shrink-0" />
-                          <span>AI Extracted — Ref: {claim.supporting_documents?.length || 0} docs</span>
+                        <div className="text-[11px] text-text-muted mt-1 opacity-70 flex flex-wrap gap-x-3 gap-y-1 font-medium uppercase tracking-tight">
+                          <div className="flex items-center gap-1">
+                            <ShieldCheck size={11} className="text-accent-emerald shrink-0" />
+                            <span>AI Extracted — Ref: {claim.supporting_documents?.length || 0} docs</span>
+                          </div>
+                          {claim.legal_basis && (
+                            <div className="flex items-center gap-1 text-accent-cyan/80">
+                              <ShieldAlert size={11} className="shrink-0" />
+                              <span>Basis: {claim.legal_basis}</span>
+                            </div>
+                          )}
+                          {claim.global_entity_id && (
+                            <div className="flex items-center gap-1 text-accent-cyan animate-pulse">
+                              <Fingerprint size={11} className="shrink-0" />
+                              <span className="font-bold">Networked Entity</span>
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-5 py-4 text-right">

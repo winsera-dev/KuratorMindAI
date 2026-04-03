@@ -18,7 +18,14 @@ from fastapi import FastAPI  # type: ignore
 from fastapi.middleware.cors import CORSMiddleware  # type: ignore
 
 # Load environment variables
-load_dotenv()
+# Look for .env in apps/agents/
+base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+env_path = os.path.join(base_dir, ".env")
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+else:
+    # Fallback for standard deployment
+    load_dotenv()
 
 app = FastAPI(
     title="KuratorMind AI — Agent API",
@@ -96,12 +103,12 @@ async def list_agents():
             {
                 "name": "regulatory_scholar",
                 "description": "Monitors Indonesian legal and accounting updates",
-                "status": "planned",
+                "status": "active",
             },
             {
                 "name": "output_architect",
                 "description": "Generates court-ready presentations and spreadsheets",
-                "status": "planned",
+                "status": "active",
             },
         ]
     }

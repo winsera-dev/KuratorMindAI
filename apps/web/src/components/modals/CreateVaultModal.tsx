@@ -64,8 +64,8 @@ export default function CreateVaultModal({
         ...formData,
         stage: formData.stage as VaultStage,
         user_id: userId,
-        // Only include date if it's set
         bankruptcy_date: formData.bankruptcy_date || undefined,
+        stage_started_at: formData.bankruptcy_date || undefined,
       });
       onSuccess();
       onClose();
@@ -187,10 +187,10 @@ export default function CreateVaultModal({
                     />
                   </div>
 
-                  {/* Bankruptcy Date */}
+                  {/* Stage Start Date (Decision Date) */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-text-secondary flex items-center gap-2">
-                      <Calendar className="w-4 h-4" /> Declaration Date
+                      <Calendar className="w-4 h-4" /> Decision Date / Start Date
                     </label>
                     <input
                       type="date"

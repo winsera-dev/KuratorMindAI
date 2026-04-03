@@ -18,7 +18,12 @@ from pydantic import BaseModel  # type: ignore
 from sse_starlette.sse import EventSourceResponse  # type: ignore
 from google import genai  # type: ignore
 from supabase import create_client  # type: ignore
-from kuratormind.tools.supabase_tools import semantic_search  # type: ignore
+from kuratormind.tools.supabase_tools import (
+    semantic_search,
+    get_vault_consolidated_findings,
+    create_audit_flag,
+)
+from kuratormind.agents.output_architect.agent import generate_and_save_report
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -32,9 +37,10 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     """Request body for the chat endpoint."""
     vault_id: str
-    session_id: str
+    session_id: str | None = None
     message: str
     user_id: str | None = None
+    agent_override: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -217,14 +223,18 @@ async def chat(request: ChatRequest):
 
     async def generate() -> AsyncGenerator[dict, None]:
         sb = _get_supabase()
+        
+        # Ensure session_id exists (needed for report generation calls)
+        # MUST be a valid UUID string for Supabase
+        session_id = request.session_id or str(uuid.uuid4())
 
         try:
             # 1. Upsert session + save user message
             if sb:
-                _upsert_session(sb, request.session_id, request.vault_id, request.user_id)
+                _upsert_session(sb, session_id, request.vault_id, request.user_id)
                 _save_message(
                     sb,
-                    session_id=request.session_id,
+                    session_id=session_id,
                     vault_id=request.vault_id,
                     role="user",
                     content=request.message,
@@ -250,12 +260,18 @@ async def chat(request: ChatRequest):
             # 4. Build chat history for multi-turn context
             history: list[dict] = []
             if sb:
-                history = _get_chat_history(sb, request.session_id)
+                history = _get_chat_history(sb, session_id)
 
             # 5. Assemble system prompt
-            system_prompt = SYSTEM_PROMPT_BASE
-            if vault_context:
-                system_prompt += f"\n\n{vault_context}"
+            if request.agent_override == "output_architect":
+                from kuratormind.agents.output_architect.agent import OUTPUT_ARCHITECT_INSTRUCTION
+                system_prompt = OUTPUT_ARCHITECT_INSTRUCTION
+                if vault_context:
+                    system_prompt += f"\n\n## Data Context for Report Extraction\n{vault_context}"
+            else:
+                system_prompt = SYSTEM_PROMPT_BASE
+                if vault_context:
+                    system_prompt += f"\n\n{vault_context}"
 
             # 6. Build contents list (history + current message)
             contents: list[dict] = []
@@ -286,25 +302,156 @@ async def chat(request: ChatRequest):
                 ),
             }
 
-            # 7. Stream from Gemini
+            # 7. Tool-Calling SSE Loop (Multi-turn Support)
             client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
-            response = client.models.generate_content_stream(
-                model="gemini-2.5-flash",
-                contents=contents,
-                config={
-                    "system_instruction": system_prompt,
-                    "temperature": 0.2,
+            
+            # Define tools map for resolution
+            TOOLS_MAP = {
+                "semantic_search": semantic_search,
+                "get_vault_consolidated_findings": get_vault_consolidated_findings,
+                "create_audit_flag": create_audit_flag,
+                "generate_and_save_report": generate_and_save_report,
+            }
+
+            # Prepare Gemini tools definition
+            gemini_tools = [{"function_declarations": [
+                {
+                    "name": "semantic_search",
+                    "description": "Search local vault documents for semantic matches.",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "query": {"type": "STRING"},
+                            "top_k": {"type": "NUMBER"}
+                        },
+                        "required": ["query"]
+                    }
                 },
-            )
+                {
+                    "name": "get_vault_consolidated_findings",
+                    "description": "Collects all forensic data (financials, claims, flags) for a vault.",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "vault_id": {"type": "STRING"}
+                        },
+                        "required": ["vault_id"]
+                    }
+                },
+                {
+                    "name": "create_audit_flag",
+                    "description": "Flag a specific forensic issue or red flag in the database.",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "vault_id": {"type": "STRING"},
+                            "title": {"type": "STRING"},
+                            "description": {"type": "STRING"},
+                            "severity": {"type": "STRING", "enum": ["low", "medium", "high", "critical"]},
+                            "source_type": {"type": "STRING"}
+                        },
+                        "required": ["vault_id", "title", "severity"]
+                    }
+                },
+                {
+                    "name": "generate_and_save_report",
+                    "description": "Generates a professional PDF and saves the report to the database.",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "vault_id": {"type": "STRING"},
+                            "title": {"type": "STRING"},
+                            "output_type": {"type": "STRING", "enum": ["judge_report", "creditor_list", "forensic_summary"]},
+                            "markdown_content": {"type": "STRING"}
+                        },
+                        "required": ["vault_id", "title", "output_type", "markdown_content"]
+                    }
+                }
+            ]}]
 
             full_text = ""
-            for chunk in response:
-                if chunk.text:
-                    full_text += chunk.text
-                    yield {
-                        "event": "token",
-                        "data": json.dumps({"text": chunk.text}),
-                    }
+            max_turns = 5
+            current_turn = 0
+            
+            while current_turn < max_turns:
+                current_turn += 1
+                
+                # We use generate_content for tool calls, and generate_content_stream for the final text response
+                # But to keep it simple and robust, we check for function calls first.
+                response = client.models.generate_content(
+                    model="models/gemini-flash-latest",
+                    contents=contents,
+                    config={
+                        "system_instruction": system_prompt,
+                        "temperature": 0.2,
+                        "tools": gemini_tools
+                    },
+                )
+                
+                candidate = response.candidates[0]
+                if not candidate.content or not candidate.content.parts:
+                    break
+
+                # Check for function calls
+                function_calls = [p.function_call for p in candidate.content.parts if p.function_call]
+                
+                if function_calls:
+                    # 1. Add model's call to history
+                    contents.append(candidate.content)
+                    
+                    # 2. Execute calls and add results to history
+                    tool_results_parts = []
+                    for fc in function_calls:
+                        tool_name = fc.name
+                        tool_args = fc.args or {}
+                        
+                        yield {
+                            "event": "agent_status",
+                            "data": json.dumps({
+                                "agent": request.agent_override or "lead_orchestrator",
+                                "status": "executing_tool",
+                                "message": f"Executing {tool_name}…",
+                                "details": tool_args
+                            }),
+                        }
+                        
+                        try:
+                            # Execute local tool
+                            if tool_name in TOOLS_MAP:
+                                # Inject vault_id if missing but required
+                                if "vault_id" in tool_args and not tool_args["vault_id"]:
+                                    tool_args["vault_id"] = request.vault_id
+                                
+                                result = TOOLS_MAP[tool_name](**tool_args)
+                            else:
+                                result = {"error": f"Tool {tool_name} not found."}
+                        except Exception as e:
+                            logger.error(f"Tool execution error ({tool_name}): {e}")
+                            result = {"error": str(e)}
+                        
+                        tool_results_parts.append({
+                            "function_response": {
+                                "name": tool_name,
+                                "response": result
+                            }
+                        })
+                    
+                    contents.append({"role": "USER", "parts": tool_results_parts})
+                    # Loop continues for next turn
+                    continue
+                
+                # If no function calls, process text
+                text_parts = [p.text for p in candidate.content.parts if p.text]
+                if text_parts:
+                    for text in text_parts:
+                        full_text += text
+                        yield {
+                            "event": "token",
+                            "data": json.dumps({"text": text}),
+                        }
+                    break
+                else:
+                    break
 
             # 8. Save assistant response to DB
             citations = []
@@ -327,11 +474,11 @@ async def chat(request: ChatRequest):
             if sb and full_text:
                 _save_message(
                     sb,
-                    session_id=request.session_id,
+                    session_id=session_id,
                     vault_id=request.vault_id,
                     role="assistant",
                     content=full_text,
-                    agent_name="lead_orchestrator",
+                    agent_name=request.agent_override or "lead_orchestrator",
                     citations=citations
                 )
 
@@ -379,7 +526,7 @@ async def chat_sync(request: ChatRequest) -> ChatResponse:
 
         client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
         response = client.models.generate_content(
-            model="gemini-2.5-flash-preview-04-17",
+            model="gemini-2.0-pro-exp-02-05",
             contents=[{"role": "USER", "parts": [{"text": request.message}]}],
             config={"system_instruction": system_prompt, "temperature": 0.2},
         )

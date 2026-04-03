@@ -185,6 +185,32 @@ async def delete_document(document_id: str):
         # Delete chunks
         sb.table("document_chunks").delete().eq("document_id", document_id).execute()
 
+        # Delete derived findings (Claims and Audit Flags)
+        try:
+            # 1. Robust Cleanup for Claims
+            # We fetch IDs first to ensure we catch all matches in the JSONB metadata
+            claims_to_del = sb.table("claims").select("id").eq("metadata->>source_document_id", document_id).execute()
+            for c in claims_to_del.data:
+                sb.table("claims").delete().eq("id", c["id"]).execute()
+            
+            # 2. Robust Cleanup for Audit Flags
+            # We fetch all flags for the vault and manually filter in Python to be 100% sure
+            # This avoids issues with the 'cs' (contains) filter on JSONB arrays
+            flags_res = sb.table("audit_flags").select("id, evidence").eq("vault_id", vault_id).execute()
+            for f in flags_res.data:
+                evidence = f.get("evidence") or []
+                # Check if any evidence item links to this document
+                is_linked = any(
+                    isinstance(e, dict) and e.get("source_document_id") == document_id 
+                    for e in evidence
+                )
+                if is_linked:
+                    sb.table("audit_flags").delete().eq("id", f["id"]).execute()
+            
+            logger.info("Systemic cleanup complete for document %s", document_id)
+        except Exception as cleanup_exc:
+            logger.warning("Systemic cleanup failed: %s", cleanup_exc)
+
         # Delete from storage
         if storage_path:
             try:

@@ -67,6 +67,14 @@ export function AuditFlagCard({ flag, onToggleResolve, onViewEvidence }: AuditFl
             <h4 className="text-sm font-black text-text-primary mt-0.5 tracking-tight group-hover:text-accent-blue transition-colors">
               {flag.title}
             </h4>
+            {flag.legal_reference && (
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <span className="px-2 py-0.5 rounded bg-accent-cyan/10 border border-accent-cyan/20 text-[9px] font-black text-accent-cyan uppercase tracking-tighter">
+                  Legal Basis: {flag.legal_reference}
+                </span>
+                <span className="text-[9px] text-text-muted font-bold opacity-40">Grounded by Regulatory Scholar</span>
+              </div>
+            )}
           </div>
         </div>
         

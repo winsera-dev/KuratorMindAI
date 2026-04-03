@@ -1,0 +1,16 @@
+creditor_name,claimed_amount,classification,currency,notes
+Bank Central Asia (BCA),2000000000000,Separatis,IDR,Inflated claim for testing discrepancy
+State Bank of India (Singapore),43880000,Separatis,USD,Secured by machinery and inventory
+Citibank N.A. Indonesia,35820000,Separatis,USD,Verified by latest financial report
+PT Bank Negara Indonesia (BNI),2900000000000,Separatis,IDR,Major local bank claim
+Bank CIMB Niaga Tbk,25330000,Separatis,USD,Cross-border credit facility
+Bea dan Cukai Surakarta,189200000000,Preferen,IDR,Unpaid import duties
+KPP Pratama Sukoharjo,28600000000,Preferen,IDR,Outstanding corporate tax
+PLN Jawa Tengah-DIY,43600000000,Preferen,IDR,Utility arrears (priority claim)
+Ex-Employees Group A,619000000000,Preferen,IDR,Consolidated labor claims for 50k workers
+Citicorp Investment Bank (Trustee),6180000000000,Konkuren,IDR,Global notes (Bondholders)
+PT Sinar Pantja Djaja,150000000000,Konkuren,IDR,Internal affiliate trade debt
+PT Lintas Mineral Sejahtera,500000000,Konkuren,IDR,Logistics vendor claim
+PT Tata Arakamaya Mandiri,750000000,Konkuren,IDR,IT services vendor
+Indofuji Energi,1200000000,Konkuren,IDR,Fuel supplier arrears
+Vendor Kain Tekstil X,250000000,Konkuren,IDR,Small raw material supplier

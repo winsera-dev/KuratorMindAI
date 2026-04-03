@@ -8,8 +8,8 @@ Provides vault document search, semantic search, and CRUD operations.
 import os
 import json
 from typing import Optional
-from google.adk.tools import FunctionTool
-from supabase import create_client, Client
+from google.adk.tools import FunctionTool # type: ignore
+from supabase import create_client, Client # type: ignore
 
 # Initialize Supabase client
 _supabase: Optional[Client] = None
@@ -93,7 +93,7 @@ def semantic_search(vault_id: str, query: str, top_k: int = 10) -> dict:
         document_id, page_number, and content for citation.
     """
     import os
-    from google import genai as _genai
+    from google import genai as _genai # type: ignore
 
     try:
         sb = _get_supabase()
@@ -170,6 +170,7 @@ def upsert_claim_record(
     collateral_description: str | None = None,
     legal_basis: str | None = None,
     metadata: dict | None = None,
+    source_document_id: str | None = None,
 ) -> dict:
     """Create or update a creditor claim record.
     
@@ -183,16 +184,13 @@ def upsert_claim_record(
         collateral_description: Details of collateral if secured.
         legal_basis: The legal grounds for the claim (e.g. invoice numbers).
         metadata: Additional JSON metadata.
+        source_document_id: ID of the document that generated this claim.
         
     Returns:
         The created/updated claim record.
     """
     try:
         sb = _get_supabase()
-        # Clean the name for alias matching if needed, 
-        # but for now we just upsert based on (vault_id, creditor_name).
-        # Note: If your schema doesn't have a unique constraint on these, 
-        # it will just insert. Checking for existing by name first.
         
         data = {
             "vault_id": vault_id,
@@ -207,11 +205,15 @@ def upsert_claim_record(
             "updated_at": "now()",
         }
         
-        # Check if exists
-        existing = sb.table("claims").select("id").eq("vault_id", vault_id).eq("creditor_name", creditor_name).maybe_single().execute()
+        if source_document_id:
+            data["metadata"]["source_document_id"] = source_document_id
         
-        if existing.data:
-            result = sb.table("claims").update(data).eq("id", existing.data["id"]).execute()
+        # Check if exists
+        query = sb.table("claims").select("id").eq("vault_id", vault_id).eq("creditor_name", creditor_name).execute()
+        existing_data = query.data
+        
+        if existing_data and len(existing_data) > 0:
+            result = sb.table("claims").update(data).eq("id", existing_data[0]["id"]).execute()
         else:
             result = sb.table("claims").insert(data).execute()
             
@@ -229,6 +231,7 @@ def create_audit_flag(
     claim_id: str | None = None,
     evidence: list[dict] | None = None,
     legal_reference: str | None = None,
+    source_document_id: str | None = None,
 ) -> dict:
     """Record a forensic audit flag (contradiction, anomaly, etc.).
     
@@ -241,12 +244,23 @@ def create_audit_flag(
         claim_id: Optional UUID of the associated claim.
         evidence: List of evidence objects {source: str, content: str}.
         legal_reference: Relevant law articles (e.g. UU 37/2004 Art 41).
+        source_document_id: ID of the document where this flag was found.
         
     Returns:
         The created audit flag record.
     """
     try:
         sb = _get_supabase()
+        
+        actual_evidence = evidence or []
+        if source_document_id:
+            # We store it in evidence so we can find it for deletion cleanup
+            actual_evidence.append({
+                "type": "source_link",
+                "source_document_id": source_document_id,
+                "note": "Automatically linked to source document"
+            })
+
         data = {
             "vault_id": vault_id,
             "claim_id": claim_id,
@@ -254,7 +268,7 @@ def create_audit_flag(
             "flag_type": flag_type,
             "title": title,
             "description": description,
-            "evidence": evidence or [],
+            "evidence": actual_evidence,
             "legal_reference": legal_reference,
             "resolved": False,
         }
@@ -278,40 +292,77 @@ def search_regulations(query: str, top_k: int = 5) -> dict:
         top_k: Number of relevant clauses to return.
     """
     return semantic_search(vault_id=GLOBAL_LEGAL_VAULT_ID, query=query, top_k=top_k)
-
-
-def sync_legal_knowledge(keywords: list[str]) -> dict:
+def sync_legal_knowledge(keywords: list[str], force: bool = False) -> dict:
     """Manual/Scheduled trigger to sync latest Indonesian regulations.
     
-    Uses web search to find new PDF/articles from official JDIH sites 
-    (Setkab, OJK, Kemenkeu) and indexes them into the Global Vault.
+    Uses Google Search to find new PDF/articles from official JDIH sites 
+    (Setkab, OJK, Kemenkeu, BPHN) and indexes them into the Global Vault.
     
     Args:
-        keywords: List of legal topics to search for (e.g. ['LPS 2026', 'PSAK 71 update']).
+        keywords: List of legal topics to search for.
+        force: If True, skip the weekly check and perform sync anyway.
     """
     import os
+    import datetime
     from google import genai as _genai # type: ignore
     
     try:
         sb = _get_supabase()
-        client = _genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
         
-        all_results = []
-        for kw in keywords:
-            # We use a targeted search query for best results
-            search_query = f"site:jdih.setkab.go.id OR site:ojk.go.id OR site:jdih.kemenkeu.go.id {kw} filetype:pdf"
-            
-            # Note: In a real environment, we'd use a search API like Serper or Brave.
-            # Here we simulate the discovery. For the demo, we assume we find 1-2 key URLs.
-            # Since I don't have a direct search_web tool *inside* this python tool,
-            # we rely on the agent calling this tool after it has used its own search_web tool.
-            
-            # For now, this tool acts as the "Ingestion Bridge" for the found URLs.
-            all_results.append(f"Simulated discovery for: {kw}")
+        # 1. Weekly Check (User Feedback: "update is on weekly basis")
+        vault_res = sb.table("vaults").select("metadata").eq("id", GLOBAL_LEGAL_VAULT_ID).maybe_single().execute()
+        # Ensure vault_metadata is treated as a mutable dict
+        vault_metadata = dict(vault_res.data.get("metadata", {})) if vault_res.data else {}
+        last_sync_str = vault_metadata.get("last_sync")
+        
+        if not force and isinstance(last_sync_str, str):
+            last_sync = datetime.datetime.fromisoformat(last_sync_str)
+            if (datetime.datetime.now(datetime.timezone.utc) - last_sync).days < 7:
+                return {"status": "skipped", "message": "Last sync was less than a week ago. Use force=True to override."}
 
+        # 2. Search and discover
+        client = _genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
+        discovered_links: list[dict[str, str]] = []
+        
+        for kw in keywords:
+            # Broad search across official government domains (OJK, Kemenkeu, BPHN)
+            search_query = f"site:ojk.go.id OR site:jdih.kemenkeu.go.id OR site:bphn.go.id {kw} 2026 2027 filetype:pdf"
+            
+            # Using GenAI as the "Search Bridge"
+            response = client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=f"Find the official URL for the latest regulation about {kw} in 2026/2027 in Indonesia. Return only a short list of URLs.",
+                config=_genai.types.GenerateContentConfig(
+                    tools=[{"google_search": {}}]
+                )
+            )
+            
+            # Extract links from grounding metadata
+            if response.candidates[0].grounding_metadata:
+                for chunk in response.candidates[0].grounding_metadata.grounding_chunks or []:
+                    if chunk.web:
+                        discovered_links.append({"url": chunk.web.uri, "title": chunk.web.title, "topic": kw})
+
+        # 3. Process first 3 discovered links (throttled for performance)
+        synced = []
+        for i, link in enumerate(discovered_links):
+            if i >= 3:
+                break
+            res = scrape_and_index_regulation(url=link["url"], title=link["title"])
+            if "success" in res:
+                synced.append(link["title"])
+        
+        # 4. Update last_sync
+        from typing import Any, cast
+        m_data = cast(dict[str, Any], vault_metadata)
+        m_data["last_sync"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        sb.table("vaults").update({"metadata": m_data}).eq("id", GLOBAL_LEGAL_VAULT_ID).execute()
+        
         return {
-            "status": "Keywords received. Please use 'scrape_and_index' for specific URLs found.",
-            "processed_keywords": keywords
+            "status": "success", 
+            "synced_count": len(synced), 
+            "synced_titles": synced,
+            "next_sync_available": (datetime.datetime.now() + datetime.timedelta(days=7)).isoformat()
         }
     except Exception as e:
         return {"error": str(e)}
@@ -369,6 +420,190 @@ def scrape_and_index_regulation(url: str, title: str) -> dict:
         )
         
         return {"success": True, "document_id": doc_id, "ingestion": ingest_result}
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_vault_consolidated_findings(vault_id: str) -> dict:
+    """Helper for Output Architect. Collects all forensic data for a vault.
+    
+    Fetches:
+    1. Financial Analyses (Ratios/Anomalies)
+    2. Audit Flags (Red flags/Legal contradictions/Regulatory issues)
+    3. Claim Statistics (Total concurrent, secured, preferential)
+    4. Global Entity Conflicts (Phase 1D - Networked risks)
+    
+    Args:
+        vault_id: UUID of the vault to consolidate.
+    """
+    try:
+        sb = _get_supabase()
+        
+        # 1. Financials
+        financials = sb.table("financial_analyses").select("*").eq("vault_id", vault_id).order("period").execute()
+        
+        # 2. Audit Flags
+        flags = sb.table("audit_flags").select("*").eq("vault_id", vault_id).execute()
+        
+        # 3. Claims
+        claims = sb.table("claims").select("*").eq("vault_id", vault_id).execute()
+
+        # 4. Global Overlaps (from Phase 1D)
+        # Find all entities in this vault that exist in others
+        overlaps = sb.table("entity_occurrences") \
+            .select("entity_id, global_entities(name, entity_type, risk_score)") \
+            .eq("vault_id", vault_id) \
+            .execute()
+            
+        return {
+            "financials": financials.data or [],
+            "audit_flags": flags.data or [],
+            "claims": claims.data or [],
+            "global_overlaps": overlaps.data or [],
+            "error": None
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def save_generated_output(
+    vault_id: str, 
+    title: str, 
+    output_type: str, 
+    content: str | dict, 
+    metadata: dict | None = None,
+    file_path: str | None = None
+) -> dict:
+    """Persist a generated forensic document to the database.
+    
+    Args:
+        vault_id: UUID of the vault.
+        title: Title of the document (e.g. 'Daftar Piutang Tetap - V2').
+        output_type: 'judge_report', 'creditor_list', 'forensic_summary'.
+        content: The primary content (Markdown string or structured JSON).
+        metadata: Optional additional metadata.
+        file_path: Optional path to the physical file in Storage.
+    """
+    try:
+        sb = _get_supabase()
+        
+        # Wrap string content in a dict for the JSONB column if it's not already
+        if isinstance(content, str):
+            content_data = {"markdown": content}
+        else:
+            content_data = content
+            
+        data = {
+            "vault_id": vault_id,
+            "title": title,
+            "output_type": output_type,
+            "content": content_data,
+            "file_path": file_path,
+            "metadata": metadata or {},
+        }
+        
+        result = sb.table("generated_outputs").insert(data).execute()
+        return {"output": result.data[0] if result.data else None, "error": None}
+    except Exception as e:
+        return {"error": str(e), "output": None}
+
+
+def global_semantic_search(query: str, top_k: int = 10, exclude_vault_id: str | None = None) -> dict:
+    """Perform semantic search across ALl document chunks in the entire database.
+
+    Useful for finding precedents, similar cases, or cross-vault evidence.
+
+    Args:
+        query: The natural language query to search for.
+        top_k: Maximum number of results to return.
+        exclude_vault_id: Optional ID to exclude from results (e.g. current case).
+
+    Returns:
+        Matches including vault_id for cross-referencing.
+    """
+    import os
+    from google import genai as _genai # type: ignore
+
+    try:
+        sb = _get_supabase()
+        client = _genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
+        embed_result = client.models.embed_content(
+            model="gemini-embedding-001",
+            contents=[query],
+            config=_genai.types.EmbedContentConfig(output_dimensionality=768),
+        )
+        query_embedding: list[float] = embed_result.embeddings[0].values
+
+        result = sb.rpc(
+            "match_global_chunks",
+            {
+                "query_embedding": query_embedding,
+                "match_count": top_k,
+                "match_threshold": 0.1,
+                "exclude_vault_id": exclude_vault_id
+            },
+        ).execute()
+
+        return {"results": result.data or [], "count": len(result.data or []), "query": query}
+    except Exception as e:
+        return {"error": str(e), "results": []}
+
+
+def resolve_global_entity(name: str, entity_type: str, vault_id: str, source_id: str, source_type: str) -> dict:
+    """Links a local entity (creditor/director) to a global identity.
+    
+    Uses fuzzy name matching to find potential existing global entities.
+    If match found > 0.85, links to it. Otherwise creates a new global entity.
+    
+    Args:
+        name: Name of the entity.
+        entity_type: 'creditor', 'debtor', 'director', 'counsel'.
+        vault_id: Current vault ID.
+        source_id: The ID of the claim or document chunk where this was found.
+        source_type: 'claim', 'chunk', etc.
+    """
+    try:
+        sb = _get_supabase()
+        
+        # 1. Fuzzy match for existing global entity
+        # We use ilike for now as a simple proxy, but with pg_trgm we could use similarity(name, ?)
+        existing = sb.table("global_entities").select("*").ilike("name", f"%{name}%").eq("entity_type", entity_type).execute()
+        
+        entity_id = None
+        if existing.data:
+            # Simple exact match check first
+            exact = next((e for e in existing.data if e["name"].lower() == name.lower()), None)
+            if exact:
+                entity_id = exact["id"]
+        
+        # 2. If not found, create new global entity
+        if not entity_id:
+            res = sb.table("global_entities").insert({
+                "name": name,
+                "entity_type": entity_type,
+            }).execute()
+            if res.data:
+                entity_id = res.data[0]["id"]
+        
+        # 3. Create occurrence record
+        if entity_id:
+            sb.table("entity_occurrences").insert({
+                "entity_id": entity_id,
+                "vault_id": vault_id,
+                "source_type": source_type,
+                "source_id": source_id,
+            }).execute()
+            
+            # Check for conflict: Does this entity exist in OTHER vaults?
+            other_vaults = sb.table("entity_occurrences").select("vault_id").eq("entity_id", entity_id).neq("vault_id", vault_id).execute()
+            has_conflict = len(other_vaults.data) > 0
+            
+            return {
+                "entity_id": entity_id, 
+                "has_conflict": has_conflict, 
+                "other_vault_count": len(other_vaults.data)
+            }
+            
+        return {"error": "Failed to resolve entity"}
     except Exception as e:
         return {"error": str(e)}
 

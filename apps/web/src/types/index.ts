@@ -2,11 +2,14 @@
 
 /** Vault case stages matching the Indonesian insolvency lifecycle */
 export type VaultStage =
-  | "pkpu_temp"       // Temporary PKPU (45-day window)
-  | "pkpu_permanent"  // Permanent PKPU (270-day negotiation)
-  | "bankrupt"        // Declared Pailit (bankruptcy)
-  | "liquidation"     // Asset sale & distribution
-  | "closed";         // Case closed, final report filed
+  | "petition"        // Stage 1: Filing
+  | "pkpu_temp"       // Stage 2: 45-day window
+  | "pkpu_permanent"  // Stage 3: 270-day window
+  | "bankrupt"        // Stage 4/5: Bankruptcy
+  | "liquidation"     // Stage 5: Asset liquidation
+  | "homologasi"       // Stage 4: Debt restructing saved
+  | "closed"          // Stage 6: Case closed
+  | "terminated";      // Legacy/Alternate close
 
 export type VaultStatus = "active" | "archived" | "closed";
 
@@ -19,6 +22,7 @@ export interface Vault {
   case_number?: string;
   court_name?: string;
   bankruptcy_date?: string;
+  stage_started_at?: string;
   stage: VaultStage;
   status: VaultStatus;
   metadata: Record<string, unknown>;
@@ -59,6 +63,7 @@ export type ClaimStatus = "pending" | "verified" | "disputed" | "rejected";
 export interface Claim {
   id: string;
   vault_id: string;
+  global_entity_id?: string; // Phase 1D: Link to canonical global identity
   creditor_name: string;
   creditor_aliases?: string[];
   claim_amount?: number;
@@ -92,6 +97,7 @@ export type FlagType =
   | "contradiction"
   | "actio_pauliana"
   | "entity_duplicate"
+  | "conflict_of_interest" // Phase 1D
   | "non_compliance"
   | "anomaly"
   | "inflated_claim";
@@ -100,6 +106,7 @@ export interface AuditFlag {
   id: string;
   vault_id: string;
   claim_id?: string;
+  global_entity_id?: string; // Phase 1D
   severity: FlagSeverity;
   flag_type: FlagType;
   title: string;
@@ -108,10 +115,38 @@ export interface AuditFlag {
     document_id: string;
     page: number;
     excerpt: string;
+    vault_id?: string; // Cross-vault evidence
   }>;
   legal_reference?: string;
   resolution?: string;
   resolved: boolean;
+  created_at: string;
+}
+
+/** Phase 1D: Global Entity Resolution */
+export type GlobalEntityType = "creditor" | "debtor" | "director" | "counsel" | "entity";
+
+export interface GlobalEntity {
+  id: string;
+  name: string;
+  entity_type: GlobalEntityType;
+  aliases: string[];
+  is_verified: boolean;
+  risk_score: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EntityOccurrence {
+  id: string;
+  entity_id: string;
+  vault_id: string;
+  vault_name?: string; // Joined field
+  source_type: "vault" | "claim" | "chunk" | "flag";
+  source_id: string;
+  confidence: number;
+  metadata: Record<string, unknown>;
   created_at: string;
 }
 
@@ -164,5 +199,23 @@ export interface AgentTask {
   error?: string;
   started_at?: string;
   completed_at?: string;
+  created_at: string;
+}
+
+/** Phase 2A: Automated Synthesis (Outputs) */
+export type OutputType = "judge_report" | "creditor_list" | "forensic_summary" | "presentation" | "spreadsheet" | "legal_summary";
+
+export interface GeneratedOutput {
+  id: string;
+  vault_id: string;
+  output_type: OutputType;
+  title: string;
+  file_path?: string;
+  content: {
+    markdown?: string;
+    json?: Record<string, any>;
+  };
+  citations: Citation[];
+  metadata: Record<string, unknown>;
   created_at: string;
 }

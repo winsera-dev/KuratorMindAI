@@ -11,7 +11,14 @@ import {
   ChatMessage, 
   Citation,
   Claim,
+  AuditFlag,
+  GlobalEntity,
+  EntityOccurrence,
+  GeneratedOutput,
 } from "@/types";
+import { createClient } from "@/lib/supabase/client";
+
+const supabase = createClient();
 
 export type { 
   Vault, 
@@ -84,6 +91,15 @@ export async function getVaults(): Promise<Vault[]> {
 }
 
 /**
+ * Fetch a single vault by ID.
+ */
+export async function getVault(vaultId: string): Promise<Vault> {
+  const res = await fetch(`${BASE_URL}/api/v1/vaults/${vaultId}`);
+  if (!res.ok) throw new Error("Failed to fetch vault");
+  return res.json();
+}
+
+/**
  * Create a new forensic vault.
  */
 export async function createVault(vault: Partial<Vault>): Promise<Vault> {
@@ -93,6 +109,21 @@ export async function createVault(vault: Partial<Vault>): Promise<Vault> {
     body: JSON.stringify(vault),
   });
   if (!res.ok) throw new Error("Failed to create vault");
+  return res.json();
+}
+/**
+ * Update an existing forensic vault (e.g. Stage transition).
+ */
+export async function updateVault(
+  vaultId: string,
+  updates: Partial<Vault>
+): Promise<Vault> {
+  const res = await fetch(`${BASE_URL}/api/v1/vaults/${vaultId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error("Failed to update vault");
   return res.json();
 }
 
@@ -273,6 +304,157 @@ export async function searchVault(
   return res.json() as Promise<SearchResponse>;
 }
 
+/**
+ * Global Regulatory Search
+ * Searches the Global Legal & PSAK Vault (ID: 0000...)
+ */
+export async function searchRegulations(query: string): Promise<SearchResponse> {
+  const res = await fetch(`${BASE_URL}/api/v1/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ 
+      vault_id: "00000000-0000-0000-0000-000000000000", 
+      query, 
+      top_k: 5 
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Regulatory search failed");
+  }
+  
+  return res.json() as Promise<SearchResponse>;
+}
+
+/**
+ * Generate Forensic Audit Report
+ * Direct trigger for the Output Architect swarm.
+ */
+export async function generateForensicReport(vaultId: string): Promise<{
+    session_id: string;
+    message: string;
+    status: string;
+}> {
+    const res = await fetch(`${BASE_URL}/api/v1/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            vault_id: vaultId,
+            message: "Generate a consolidated Forensic Audit Report for this vault. Summarize all findings, claims, and financial anomalies.",
+            agent_override: "output_architect" 
+        }),
+    });
+
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail ?? "Report generation failed");
+    }
+    
+    return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Outputs API
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch all generated documents for a vault.
+ */
+export async function getGeneratedOutputs(
+  vaultId: string
+): Promise<GeneratedOutput[]> {
+  const { data, error } = await supabase
+    .from("generated_outputs")
+    .select("*")
+    .eq("vault_id", vaultId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data as GeneratedOutput[]) || [];
+}
+
+/**
+ * Trigger the Output Architect to generate a new report.
+ * Uses the Chat API internally with the output_architect override.
+ */
+export async function generateReport(
+  vaultId: string,
+  type: string,
+  title: string
+): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${BASE_URL}/api/v1/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      vault_id: vaultId,
+      message: `Generate a professional ${type} with the title '${title}'. Consolidate all forensic findings, claims, and financial anomalies.`,
+      agent_override: "output_architect"
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    const errorMessage = typeof err.detail === "string" 
+      ? err.detail 
+      : JSON.stringify(err.detail);
+    throw new Error(errorMessage ?? "Report generation failed");
+  }
+
+  return { success: true, message: "Generation started" };
+}
+
+/**
+ * Polls for a new report creation.
+ * Since the Output Architect saves to the DB after generation,
+ * we poll for a record with a recent created_at timestamp.
+ */
+export async function waitForReport(
+  vaultId: string,
+  type: string,
+  timeoutMs: number = 60000
+): Promise<GeneratedOutput> {
+  const startTime = Date.now();
+  const pollInterval = 2000;
+
+  while (Date.now() - startTime < timeoutMs) {
+    const { data, error } = await supabase
+      .from("generated_outputs")
+      .select("*")
+      .eq("vault_id", vaultId)
+      .eq("output_type", type)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybe_single();
+
+    if (error) throw error;
+
+    // If it's created in the last 2 minutes, assume it's our new one
+    if (data) {
+      const createdAt = new Date(data.created_at).getTime();
+      if (Date.now() - createdAt < 120000) {
+        return data as GeneratedOutput;
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+  }
+
+  throw new Error("Report generation timed out. Please check the list in a moment.");
+}
+
+/**
+ * Generate a signed URL for a generated output (PDF).
+ */
+export async function getOutputSignedUrl(vaultId: string, filePath: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from("vault-files")
+    .createSignedUrl(filePath, 3600); // 1 hour
+
+  if (error) throw error;
+  return data.signedUrl;
+}
+
 // ---------------------------------------------------------------------------
 // Chat API — SSE streaming
 // ---------------------------------------------------------------------------
@@ -372,4 +554,38 @@ export async function checkHealth(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1D: Cross-Vault Intelligence
+// ---------------------------------------------------------------------------
+
+export async function getGlobalConflicts(vaultId: string): Promise<{
+  conflicts: AuditFlag[];
+  entities: GlobalEntity[];
+}> {
+  // 1. Fetch conflict flags
+  const { data: flags, error: flagErr } = await supabase
+    .from("audit_flags")
+    .select("*")
+    .or("flag_type.eq.conflict_of_interest,flag_type.eq.entity_duplicate")
+    .eq("vault_id", vaultId);
+
+  if (flagErr) throw flagErr;
+
+  // 2. Fetch global occurrences for this vault
+  const { data: occurrences, error: occErr } = await supabase
+    .from("entity_occurrences")
+    .select(`
+      *,
+      global_entities (*)
+    `)
+    .eq("vault_id", vaultId);
+
+  if (occErr) throw occErr;
+
+  return {
+    conflicts: (flags as AuditFlag[]) || [],
+    entities: (occurrences?.map((o: any) => o.global_entities) as GlobalEntity[]) || []
+  };
 }

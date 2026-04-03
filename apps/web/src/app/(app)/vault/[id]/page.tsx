@@ -30,6 +30,7 @@ import {
   getChatHistory,
   streamChat,
   getDocumentSignedUrl,
+  getVault,
   type VaultDocument,
   type Citation,
 } from "@/lib/api";
@@ -37,8 +38,11 @@ import { cn } from "@/lib/utils";
 import { ClaimsTab } from "@/components/vault/ClaimsTab";
 import { AuditTab } from "@/components/vault/AuditTab";
 import { DiscoveryTab } from "@/components/vault/DiscoveryTab";
+import { CrossVaultTab } from "@/components/vault/CrossVaultTab";
+import { OutputsTab } from "@/components/vault/OutputsTab";
 import { ForensicSidebar } from "@/components/vault/ForensicSidebar";
-import { type Claim } from "@/types";
+import { VaultStatusBadge } from "@/components/vault/VaultStatusBadge";
+import { type Claim, type Vault } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Tab config
@@ -50,6 +54,7 @@ const TABS = [
   { id: "search", label: "Discovery", Icon: Search },
   { id: "claims", label: "Claims", Icon: ClipboardList },
   { id: "audit", label: "Audit", Icon: ClipboardList },
+  { id: "intelligence", label: "Intelligence", Icon: Search }, // Phase 1D
   { id: "outputs", label: "Outputs", Icon: FileOutput },
 ] as const;
 
@@ -68,6 +73,7 @@ export default function VaultWorkspace({
   const [activeTab, setActiveTab] = useState<TabId>("chat");
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
+  const [vault, setVault] = useState<Vault | null>(null);
 
   // Health polling with 2-strike tolerance (prevents flicker during reloads)
   const failCountRef = useRef(0);
@@ -89,8 +95,12 @@ export default function VaultWorkspace({
 
     poll(); // Check immediately
     const interval = setInterval(poll, 10_000);
+
+    // Initial vault fetch
+    getVault(vaultId).then(setVault).catch(console.error);
+
     return () => clearInterval(interval);
-  }, []);
+  }, [vaultId]);
 
   return (
     <div className="h-screen flex flex-col bg-primary">
@@ -104,11 +114,17 @@ export default function VaultWorkspace({
             <ArrowLeft size={18} />
           </Link>
           <div>
-            <h1 className="text-sm font-semibold text-text-primary">
+            <h1 className="text-sm font-semibold text-text-primary flex items-center gap-2">
               Vault — <span className="font-mono text-xs text-text-muted">{vaultId.slice(0, 8)}…</span>
+              {vault && (
+                <VaultStatusBadge 
+                  vault={vault} 
+                  onUpdate={setVault} 
+                />
+              )}
             </h1>
             <p className="text-xs text-text-muted">
-              KuratorMind AI Workspace
+              {vault?.name || "KuratorMind AI Workspace"}
             </p>
           </div>
         </div>
@@ -204,11 +220,23 @@ export default function VaultWorkspace({
           <div className="h-full px-6 py-6 bg-primary overflow-y-auto">
             <AuditTab 
               vaultId={vaultId} 
-              onViewEvidence={(ev) => setSelectedEvidence(ev)}
+              onViewEvidence={(ev: Citation) => setSelectedEvidence(ev)}
             />
           </div>
         )}
-        {activeTab === "outputs" && <PlaceholderTab name="Outputs" phase="1C" Icon={FileOutput} />}
+        {activeTab === "intelligence" && (
+          <div className="h-full px-6 py-6 bg-primary overflow-y-auto">
+            <CrossVaultTab 
+              vaultId={vaultId} 
+              onViewEvidence={(ev: Citation) => setSelectedEvidence(ev)}
+            />
+          </div>
+        )}
+        {activeTab === "outputs" && (
+          <div className="h-full px-8 py-10 bg-primary overflow-y-auto">
+            <OutputsTab vaultId={vaultId} />
+          </div>
+        )}
       </main>
 
       {/* Forensic Sidebar (Drill-down) */}
@@ -872,33 +900,4 @@ function SourceDrawer({
   );
 }
 
-function PlaceholderTab({
-  name,
-  phase,
-  Icon,
-}: {
-  name: string;
-  phase: string;
-  Icon: React.ElementType;
-}) {
-  return (
-    <div className="h-full flex items-center justify-center">
-      <div className="text-center space-y-3">
-        <div className="w-16 h-16 mx-auto rounded-2xl bg-elevated border border-border-default flex items-center justify-center">
-          <Icon size={24} className="text-text-muted opacity-40" />
-        </div>
-        <h2 className="text-lg font-semibold text-text-secondary">
-          {name} — Coming in Phase {phase}
-        </h2>
-        <p className="text-sm text-text-muted max-w-md">
-          This feature will be available once the current phase is complete.
-          The agent brain takes priority first.
-        </p>
-        <div className="flex items-center justify-center gap-1.5 text-xs text-text-muted">
-          <ChevronRight size={12} />
-          <span>Phase 1A → 1B → 1C</span>
-        </div>
-      </div>
-    </div>
-  );
-}
+
