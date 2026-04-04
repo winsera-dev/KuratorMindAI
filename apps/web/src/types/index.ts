@@ -1,7 +1,7 @@
 /** Shared types for KuratorMind AI */
 
-/** Vault case stages matching the Indonesian insolvency lifecycle */
-export type VaultStage =
+/** Case case stages matching the Indonesian insolvency lifecycle */
+export type CaseStage =
   | "petition"        // Stage 1: Filing
   | "pkpu_temp"       // Stage 2: 45-day window
   | "pkpu_permanent"  // Stage 3: 270-day window
@@ -11,9 +11,9 @@ export type VaultStage =
   | "closed"          // Stage 6: Case closed
   | "terminated";      // Legacy/Alternate close
 
-export type VaultStatus = "active" | "archived" | "closed";
+export type CaseStatus = "active" | "archived" | "closed";
 
-export interface Vault {
+export interface Case {
   id: string;
   user_id: string;
   name: string;
@@ -22,8 +22,8 @@ export interface Vault {
   case_number?: string;
   court_name?: string;
   stage_started_at?: string;
-  stage: VaultStage;
-  status: VaultStatus;
+  stage: CaseStage;
+  status: CaseStatus;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -31,9 +31,9 @@ export interface Vault {
 
 export type DocumentStatus = "pending" | "processing" | "ready" | "error";
 
-export interface VaultDocument {
+export interface CaseDocument {
   id: string;
-  vault_id: string;
+  case_id: string;
   file_name: string;
   file_type: string;
   file_path: string;
@@ -48,7 +48,7 @@ export interface VaultDocument {
 export interface DocumentChunk {
   id: string;
   document_id: string;
-  vault_id: string;
+  case_id: string;
   content: string;
   chunk_index: number;
   page_number?: number;
@@ -61,7 +61,7 @@ export type ClaimStatus = "pending" | "verified" | "disputed" | "rejected";
 
 export interface Claim {
   id: string;
-  vault_id: string;
+  case_id: string;
   global_entity_id?: string; // Phase 1D: Link to canonical global identity
   creditor_name: string;
   creditor_aliases?: string[];
@@ -103,7 +103,7 @@ export type FlagType =
 
 export interface AuditFlag {
   id: string;
-  vault_id: string;
+  case_id: string;
   claim_id?: string;
   global_entity_id?: string; // Phase 1D
   severity: FlagSeverity;
@@ -114,7 +114,7 @@ export interface AuditFlag {
     document_id: string;
     page: number;
     excerpt: string;
-    vault_id?: string; // Cross-vault evidence
+    case_id?: string; // Cross-case evidence
   }>;
   legal_reference?: string;
   resolution?: string;
@@ -140,9 +140,9 @@ export interface GlobalEntity {
 export interface EntityOccurrence {
   id: string;
   entity_id: string;
-  vault_id: string;
-  vault_name?: string; // Joined field
-  source_type: "vault" | "claim" | "chunk" | "flag";
+  case_id: string;
+  case_name?: string; // Joined field
+  source_type: "case" | "claim" | "chunk" | "flag";
   source_id: string;
   confidence: number;
   metadata: Record<string, unknown>;
@@ -151,7 +151,7 @@ export interface EntityOccurrence {
 
 export interface ChatSession {
   id: string;
-  vault_id: string;
+  case_id: string;
   user_id: string;
   title: string;
   created_at: string;
@@ -187,7 +187,7 @@ export type AgentTaskStatus =
 
 export interface AgentTask {
   id: string;
-  vault_id: string;
+  case_id: string;
   parent_task_id?: string;
   agent_name: string;
   task_type: string;
@@ -206,7 +206,7 @@ export type OutputType = "judge_report" | "creditor_list" | "forensic_summary" |
 
 export interface GeneratedOutput {
   id: string;
-  vault_id: string;
+  case_id: string;
   output_type: OutputType;
   title: string;
   file_path?: string;

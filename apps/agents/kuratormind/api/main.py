@@ -117,14 +117,14 @@ async def list_agents():
 # Import route modules
 from kuratormind.api.routes.chat import router as chat_router  # type: ignore
 from kuratormind.api.routes.documents import router as documents_router  # type: ignore
-from kuratormind.api.routes.vaults import router as vaults_router  # type: ignore
+from kuratormind.api.routes.cases import router as cases_router  # type: ignore
 from kuratormind.api.routes.claims import router as claims_router  # type: ignore
 from kuratormind.api.routes.audit import router as audit_router  # type: ignore
 from kuratormind.api.routes.search import router as search_router  # type: ignore
 
 app.include_router(chat_router, prefix="/api/v1", tags=["chat"])
 app.include_router(documents_router, prefix="/api/v1", tags=["documents"])
-app.include_router(vaults_router, prefix="/api/v1", tags=["vaults"])
+app.include_router(cases_router, prefix="/api/v1", tags=["cases"])
 app.include_router(claims_router, prefix="/api/v1", tags=["claims"])
 app.include_router(audit_router, prefix="/api/v1", tags=["audit"])
 app.include_router(search_router, prefix="/api/v1", tags=["search"])

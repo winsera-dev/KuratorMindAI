@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 
 interface ClaimsTabProps {
-  vaultId: string;
+  caseId: string;
   isScanningOverride?: boolean;
   onViewEvidence?: (claim: Claim) => void;
 }
@@ -27,7 +27,7 @@ interface ClaimsTabProps {
  * Claims Workspace Container
  * Orchestrates data fetching and top-level filters for the creditor list.
  */
-export function ClaimsTab({ vaultId, isScanningOverride, onViewEvidence }: ClaimsTabProps) {
+export function ClaimsTab({ caseId, isScanningOverride, onViewEvidence }: ClaimsTabProps) {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,15 +45,15 @@ export function ClaimsTab({ vaultId, isScanningOverride, onViewEvidence }: Claim
   const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
-      // 1. Check for processing documents in this vault (if not overridden)
+      // 1. Check for processing documents in this case (if not overridden)
       if (isScanningOverride === undefined) {
-        const docsData = await getDocuments(vaultId);
+        const docsData = await getDocuments(caseId);
         const processing = docsData.documents.some(d => d.status === "pending" || d.status === "processing");
         setIsScanning(processing);
       }
 
       // 2. Fetch claims
-      const data = await getClaims(vaultId);
+      const data = await getClaims(caseId);
       setClaims(data.claims);
       setError(null);
     } catch (err) {
@@ -63,7 +63,7 @@ export function ClaimsTab({ vaultId, isScanningOverride, onViewEvidence }: Claim
       setLoading(false);
       setRefreshing(false);
     }
-  }, [vaultId]);
+  }, [caseId]);
 
   useEffect(() => {
     fetchData();

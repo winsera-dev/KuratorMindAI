@@ -10,12 +10,12 @@ import {
   RefreshCw
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import CreateVaultModal from "@/components/modals/CreateVaultModal";
-import VaultCard from "@/components/VaultCard";
-import { getVaults } from "@/lib/api";
+import CreateCaseModal from "@/components/modals/CreateCaseModal";
+import CaseCard from "@/components/CaseCard";
+import { getCases } from "@/lib/api";
 
 export default function DashboardPage() {
-  const [vaults, setVaults] = useState<any[]>([]);
+  const [cases, setCases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -24,7 +24,7 @@ export default function DashboardPage() {
 
   const supabase = createClient();
 
-  const fetchVaults = useCallback(async () => {
+  const fetchCases = useCallback(async () => {
     setLoading(true);
     try {
       // Get current user session
@@ -33,21 +33,21 @@ export default function DashboardPage() {
       
       setUserId(session.user.id);
       
-      const data = await getVaults();
-      setVaults(data || []);
+      const data = await getCases();
+      setCases(data || []);
     } catch (err: any) {
-      console.error("Error fetching vaults:", err.message || err);
+      console.error("Error fetching cases:", err.message || err);
     } finally {
       setLoading(false);
     }
   }, [supabase]);
 
   useEffect(() => {
-    fetchVaults();
-  }, [fetchVaults, refreshKey]);
+    fetchCases();
+  }, [fetchCases, refreshKey]);
 
-  // Filtered vaults based on search
-  const filteredVaults = vaults.filter(v => 
+  // Filtered cases based on search
+  const filteredCases = cases.filter(v => 
     v.name?.toLowerCase().includes(search.toLowerCase()) || 
     v.case_number?.toLowerCase().includes(search.toLowerCase()) ||
     v.debtor_entity?.toLowerCase().includes(search.toLowerCase())
@@ -58,7 +58,7 @@ export default function DashboardPage() {
       {/* Header */}
       <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Forensic Vaults</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Forensic Cases</h1>
           <p className="text-text-secondary mt-1">
             Active insolvency cases and automated debt tracking
           </p>
@@ -101,18 +101,18 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* Vault Grid */}
+      {/* Case Grid */}
       <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar pb-12">
-        {loading && vaults.length === 0 ? (
+        {loading && cases.length === 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3].map(i => (
               <div key={i} className="skeleton h-[280px] w-full" />
             ))}
           </div>
-        ) : filteredVaults.length > 0 ? (
+        ) : filteredCases.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredVaults.map((vault) => (
-              <VaultCard key={vault.id} vault={vault} />
+            {filteredCases.map((caseItem) => (
+              <CaseCard key={caseItem.id} caseData={caseItem} />
             ))}
           </div>
         ) : (
@@ -134,9 +134,9 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Create Vault Modal */}
+      {/* Create Case Modal */}
       {userId && (
-        <CreateVaultModal
+        <CreateCaseModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onSuccess={() => setRefreshKey(prev => prev + 1)}

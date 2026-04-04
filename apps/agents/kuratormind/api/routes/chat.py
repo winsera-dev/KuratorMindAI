@@ -20,7 +20,7 @@ from google import genai  # type: ignore
 from supabase import create_client  # type: ignore
 from kuratormind.tools.supabase_tools import (
     semantic_search,
-    get_vault_consolidated_findings,
+    get_case_consolidated_findings,
     create_audit_flag,
 )
 from kuratormind.agents.output_architect.agent import generate_and_save_report
@@ -36,7 +36,7 @@ router = APIRouter()
 
 class ChatRequest(BaseModel):
     """Request body for the chat endpoint."""
-    vault_id: str
+    case_id: str
     session_id: str | None = None
     message: str
     user_id: str | None = None
@@ -63,20 +63,20 @@ def _get_supabase():
     return create_client(url, key)
 
 
-def _upsert_session(sb, session_id: str, vault_id: str, user_id: str | None) -> None:
-    """Ensure a chat_sessions row exists. Resolves user_id from vault if needed."""
+def _upsert_session(sb, session_id: str, case_id: str, user_id: str | None) -> None:
+    """Ensure a chat_sessions row exists. Resolves user_id from case if needed."""
     try:
-        # If user_id is missing, try to find it from the vault record
+        # If user_id is missing, try to find it from the case record
         resolved_user_id = user_id
         if not resolved_user_id:
-            vault = sb.table("vaults").select("user_id").eq("id", vault_id).maybe_single().execute()
-            if vault.data:
-                resolved_user_id = vault.data.get("user_id")
+            case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+            if case.data:
+                resolved_user_id = case.data.get("user_id")
 
         sb.table("chat_sessions").upsert(
             {
                 "id": session_id,
-                "vault_id": vault_id,
+                "case_id": case_id,
                 "user_id": resolved_user_id,
                 "title": "Untitled Chat",
             },
@@ -89,7 +89,7 @@ def _upsert_session(sb, session_id: str, vault_id: str, user_id: str | None) -> 
 def _save_message(
     sb,
     session_id: str,
-    vault_id: str,
+    case_id: str,
     role: str,
     content: str,
     citations: list[dict] | None = None,
@@ -130,10 +130,10 @@ def _get_chat_history(sb, session_id: str, limit: int = 20) -> list[dict[str, st
         return []
 
 
-def _fetch_vault_context(sb, vault_id: str, query: str) -> tuple[str, list[dict]]:
+def _fetch_case_context(sb, case_id: str, query: str) -> tuple[str, list[dict]]:
     """
     Combines:
-    1. Metadata for ALL documents in the vault (so the agent knows what exists)
+    1. Metadata for ALL documents in the case (so the agent knows what exists)
     2. Semantic Search results (pgvector) for the specific user query
     
     Returns a tuple: (formatted_markdown_context, raw_search_chunks)
@@ -141,15 +141,15 @@ def _fetch_vault_context(sb, vault_id: str, query: str) -> tuple[str, list[dict]
     try:
         # 1. Fetch available document metadata
         docs = (
-            sb.table("vault_documents")
+            sb.table("case_documents")
             .select("id, file_name, file_type, page_count, status")
-            .eq("vault_id", vault_id)
+            .eq("case_id", case_id)
             .execute()
         )
         doc_list = docs.data or []
-        doc_info = ["## Available Documents in the Vault"]
+        doc_info = ["## Available Documents in the Case"]
         if not doc_list:
-            doc_info.append("No documents currently exist in this vault.")
+            doc_info.append("No documents currently exist in this case.")
         else:
             for idx, doc in enumerate(doc_list, 1):
                 name = doc.get("file_name", "Unknown File")
@@ -158,7 +158,7 @@ def _fetch_vault_context(sb, vault_id: str, query: str) -> tuple[str, list[dict]
                 doc_info.append(f"- **{name}** (Pages: {pages}, Status: {status})")
 
         # 2. Perform Semantic Search (pgvector)
-        search_results = semantic_search(vault_id, query, top_k=8)
+        search_results = semantic_search(case_id, query, top_k=8)
         chunks = search_results.get("results", [])
         
         rag_lines = ["\n## Relevant Document Excerpts (Context)"]
@@ -177,7 +177,7 @@ def _fetch_vault_context(sb, vault_id: str, query: str) -> tuple[str, list[dict]
 
     except Exception as exc:
         logging.error("Context fetch error: %s", exc)
-        return "Error fetching vault context.", []
+        return "Error fetching case context.", []
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +200,7 @@ SYSTEM_PROMPT_BASE = """You are KuratorMind AI, a forensic AI assistant for Indo
 - PSAK/IFRS: Indonesian accounting standards apply
 
 ## Instructions
-When vault documents are provided below, ground ALL answers in those documents. Always quote specific passages with their citations.
+When case documents are provided below, ground ALL answers in those documents. Always quote specific passages with their citations.
 """
 
 
@@ -231,11 +231,11 @@ async def chat(request: ChatRequest):
         try:
             # 1. Upsert session + save user message
             if sb:
-                _upsert_session(sb, session_id, request.vault_id, request.user_id)
+                _upsert_session(sb, session_id, request.case_id, request.user_id)
                 _save_message(
                     sb,
                     session_id=session_id,
-                    vault_id=request.vault_id,
+                    case_id=request.case_id,
                     role="user",
                     content=request.message,
                 )
@@ -247,15 +247,15 @@ async def chat(request: ChatRequest):
                     {
                         "agent": "lead_orchestrator",
                         "status": "working",
-                        "message": "Searching vault context…",
+                        "message": "Searching case context…",
                     }
                 ),
             }
 
-            # 3. Fetch vault document context (RAG)
-            vault_context, retrieved_chunks = "", []
+            # 3. Fetch case document context (RAG)
+            case_context, retrieved_chunks = "", []
             if sb:
-                vault_context, retrieved_chunks = _fetch_vault_context(sb, request.vault_id, request.message)
+                case_context, retrieved_chunks = _fetch_case_context(sb, request.case_id, request.message)
 
             # 4. Build chat history for multi-turn context
             history: list[dict] = []
@@ -266,12 +266,12 @@ async def chat(request: ChatRequest):
             if request.agent_override == "output_architect":
                 from kuratormind.agents.output_architect.agent import OUTPUT_ARCHITECT_INSTRUCTION
                 system_prompt = OUTPUT_ARCHITECT_INSTRUCTION
-                if vault_context:
-                    system_prompt += f"\n\n## Data Context for Report Extraction\n{vault_context}"
+                if case_context:
+                    system_prompt += f"\n\n## Data Context for Report Extraction\n{case_context}"
             else:
                 system_prompt = SYSTEM_PROMPT_BASE
-                if vault_context:
-                    system_prompt += f"\n\n{vault_context}"
+                if case_context:
+                    system_prompt += f"\n\n{case_context}"
 
             # 6. Build contents list (history + current message)
             contents: list[dict] = []
@@ -308,7 +308,7 @@ async def chat(request: ChatRequest):
             # Define tools map for resolution
             TOOLS_MAP = {
                 "semantic_search": semantic_search,
-                "get_vault_consolidated_findings": get_vault_consolidated_findings,
+                "get_case_consolidated_findings": get_case_consolidated_findings,
                 "create_audit_flag": create_audit_flag,
                 "generate_and_save_report": generate_and_save_report,
             }
@@ -317,7 +317,7 @@ async def chat(request: ChatRequest):
             gemini_tools = [{"function_declarations": [
                 {
                     "name": "semantic_search",
-                    "description": "Search local vault documents for semantic matches.",
+                    "description": "Search local case documents for semantic matches.",
                     "parameters": {
                         "type": "OBJECT",
                         "properties": {
@@ -328,14 +328,14 @@ async def chat(request: ChatRequest):
                     }
                 },
                 {
-                    "name": "get_vault_consolidated_findings",
-                    "description": "Collects all forensic data (financials, claims, flags) for a vault.",
+                    "name": "get_case_consolidated_findings",
+                    "description": "Collects all forensic data (financials, claims, flags) for a case.",
                     "parameters": {
                         "type": "OBJECT",
                         "properties": {
-                            "vault_id": {"type": "STRING"}
+                            "case_id": {"type": "STRING"}
                         },
-                        "required": ["vault_id"]
+                        "required": ["case_id"]
                     }
                 },
                 {
@@ -344,13 +344,13 @@ async def chat(request: ChatRequest):
                     "parameters": {
                         "type": "OBJECT",
                         "properties": {
-                            "vault_id": {"type": "STRING"},
+                            "case_id": {"type": "STRING"},
                             "title": {"type": "STRING"},
                             "description": {"type": "STRING"},
                             "severity": {"type": "STRING", "enum": ["low", "medium", "high", "critical"]},
                             "source_type": {"type": "STRING"}
                         },
-                        "required": ["vault_id", "title", "severity"]
+                        "required": ["case_id", "title", "severity"]
                     }
                 },
                 {
@@ -359,12 +359,12 @@ async def chat(request: ChatRequest):
                     "parameters": {
                         "type": "OBJECT",
                         "properties": {
-                            "vault_id": {"type": "STRING"},
+                            "case_id": {"type": "STRING"},
                             "title": {"type": "STRING"},
                             "output_type": {"type": "STRING", "enum": ["judge_report", "creditor_list", "forensic_summary"]},
                             "markdown_content": {"type": "STRING"}
                         },
-                        "required": ["vault_id", "title", "output_type", "markdown_content"]
+                        "required": ["case_id", "title", "output_type", "markdown_content"]
                     }
                 }
             ]}]
@@ -418,9 +418,9 @@ async def chat(request: ChatRequest):
                         try:
                             # Execute local tool
                             if tool_name in TOOLS_MAP:
-                                # Inject vault_id if missing but required
-                                if "vault_id" in tool_args and not tool_args["vault_id"]:
-                                    tool_args["vault_id"] = request.vault_id
+                                # Inject case_id if missing but required
+                                if "case_id" in tool_args and not tool_args["case_id"]:
+                                    tool_args["case_id"] = request.case_id
                                 
                                 result = TOOLS_MAP[tool_name](**tool_args)
                             else:
@@ -475,7 +475,7 @@ async def chat(request: ChatRequest):
                 _save_message(
                     sb,
                     session_id=session_id,
-                    vault_id=request.vault_id,
+                    case_id=request.case_id,
                     role="assistant",
                     content=full_text,
                     agent_name=request.agent_override or "lead_orchestrator",
@@ -514,15 +514,15 @@ async def chat_sync(request: ChatRequest) -> ChatResponse:
     """Non-streaming chat. Returns the full response at once."""
     try:
         sb = _get_supabase()
-        vault_context = ""
+        case_context = ""
         if sb:
-            _upsert_session(sb, request.session_id, request.vault_id, request.user_id)
-            _save_message(sb, request.session_id, request.vault_id, "user", request.message)
-            vault_context = _fetch_vault_context(sb, request.vault_id, request.message)
+            _upsert_session(sb, request.session_id, request.case_id, request.user_id)
+            _save_message(sb, request.session_id, request.case_id, "user", request.message)
+            case_context = _fetch_case_context(sb, request.case_id, request.message)
 
         system_prompt = SYSTEM_PROMPT_BASE
-        if vault_context:
-            system_prompt += f"\n\n{vault_context}"
+        if case_context:
+            system_prompt += f"\n\n{case_context}"
 
         client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
         response = client.models.generate_content(
@@ -535,7 +535,7 @@ async def chat_sync(request: ChatRequest) -> ChatResponse:
 
         if sb:
             _save_message(
-                sb, request.session_id, request.vault_id,
+                sb, request.session_id, request.case_id,
                 "assistant", content, agent_name="lead_orchestrator"
             )
 

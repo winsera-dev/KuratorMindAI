@@ -16,10 +16,10 @@ import {
   Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Vault, VaultStage } from "@/types";
-import { updateVault } from "@/lib/api";
+import { Case, CaseStage } from "@/types";
+import { updateCase } from "@/lib/api";
 
-const STAGE_OPTIONS: Record<VaultStage, string> = {
+const STAGE_OPTIONS: Record<CaseStage, string> = {
   petition: "Petition (Filing)",
   pkpu_temp: "PKPU Temporary (45d)",
   pkpu_permanent: "PKPU Permanent (270d)",
@@ -30,24 +30,24 @@ const STAGE_OPTIONS: Record<VaultStage, string> = {
   terminated: "Terminated",
 };
 
-interface EditVaultModalProps {
-  vault: Vault;
+interface EditCaseModalProps {
+  caseData: Case;
   isOpen: boolean;
   onClose: () => void;
-  onUpdate: (updatedVault: Vault) => void;
+  onUpdate: (updatedVault: Case) => void;
 }
 
-export function EditVaultModal({ vault, isOpen, onClose, onUpdate }: EditVaultModalProps) {
+export function EditCaseModal({ caseData, isOpen, onClose, onUpdate }: EditCaseModalProps) {
   const [loading, setLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [formData, setFormData] = useState({
-    name: vault.name,
-    debtor_entity: vault.debtor_entity || "",
-    case_number: vault.case_number || "",
-    court_name: vault.court_name || "",
-    description: vault.description || "",
-    stage: vault.stage,
-    stage_started_at: vault.stage_started_at ? vault.stage_started_at.split("T")[0] : new Date().toISOString().split("T")[0],
+    name: caseData.name,
+    debtor_entity: caseData.debtor_entity || "",
+    case_number: caseData.case_number || "",
+    court_name: caseData.court_name || "",
+    description: caseData.description || "",
+    stage: caseData.stage,
+    stage_started_at: caseData.stage_started_at ? caseData.stage_started_at.split("T")[0] : new Date().toISOString().split("T")[0],
   });
 
   // Handle slide-in animation exactly like ForensicSidebar
@@ -60,7 +60,7 @@ export function EditVaultModal({ vault, isOpen, onClose, onUpdate }: EditVaultMo
     }
   }, [isOpen]);
 
-  const handleStageChange = (newStage: VaultStage) => {
+  const handleStageChange = (newStage: CaseStage) => {
     setFormData(prev => ({
       ...prev,
       stage: newStage,
@@ -72,11 +72,11 @@ export function EditVaultModal({ vault, isOpen, onClose, onUpdate }: EditVaultMo
     e.preventDefault();
     setLoading(true);
     try {
-      const updated = await updateVault(vault.id, formData);
+      const updated = await updateCase(caseData.id, formData);
       onUpdate(updated);
       onClose();
     } catch (err) {
-      console.error("Failed to update vault:", err);
+      console.error("Failed to update caseData:", err);
     } finally {
       setLoading(false);
     }
@@ -194,7 +194,7 @@ export function EditVaultModal({ vault, isOpen, onClose, onUpdate }: EditVaultMo
                        <label className="text-[9px] font-bold text-text-muted uppercase tracking-widest pl-0.5">Active Case Stage</label>
                        <select 
                         value={formData.stage}
-                        onChange={e => handleStageChange(e.target.value as VaultStage)}
+                        onChange={e => handleStageChange(e.target.value as CaseStage)}
                         className="w-full bg-secondary/30 border border-border-default rounded-xl py-2.5 px-4 text-xs font-bold text-text-primary outline-none transition-all cursor-pointer appearance-none"
                        >
                          {Object.entries(STAGE_OPTIONS).map(([id, label]) => (

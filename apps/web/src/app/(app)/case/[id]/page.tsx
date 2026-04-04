@@ -20,31 +20,33 @@ import {
   Loader2,
   ChevronRight,
   Bot,
+  Settings,
   Pencil,
+  Hash,
 } from "lucide-react";
 import { 
   checkHealth, 
   deleteDocument, 
   getDocuments, 
   uploadDocument, 
-  searchVault,
+  searchCase,
   getChatHistory,
   streamChat,
   getDocumentSignedUrl,
-  getVault,
-  type VaultDocument,
+  getCase,
+  type CaseDocument,
   type Citation,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { ClaimsTab } from "@/components/vault/ClaimsTab";
-import { AuditTab } from "@/components/vault/AuditTab";
-import { DiscoveryTab } from "@/components/vault/DiscoveryTab";
-import { CrossVaultTab } from "@/components/vault/CrossVaultTab";
-import { OutputsTab } from "@/components/vault/OutputsTab";
-import { ForensicSidebar } from "@/components/vault/ForensicSidebar";
-import { VaultStatusBadge } from "@/components/vault/VaultStatusBadge";
-import { EditVaultModal } from "@/components/vault/EditVaultModal";
-import { type Claim, type Vault } from "@/types";
+import { ClaimsTab } from "@/components/case/ClaimsTab";
+import { AuditTab } from "@/components/case/AuditTab";
+import { DiscoveryTab } from "@/components/case/DiscoveryTab";
+import { CrossCaseTab } from "@/components/case/CrossCaseTab";
+import { OutputsTab } from "@/components/case/OutputsTab";
+import { ForensicSidebar } from "@/components/case/ForensicSidebar";
+import { CaseStatusBadge } from "@/components/case/CaseStatusBadge";
+import { EditCaseModal } from "@/components/case/EditCaseModal";
+import { type Claim, type Case } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Tab config
@@ -66,31 +68,31 @@ type TabId = (typeof TABS)[number]["id"];
 // Page
 // ---------------------------------------------------------------------------
 
-export default function VaultWorkspace({
+export default function CaseWorkspace({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id: vaultId } = use(params);
+  const { id: caseId } = use(params);
   const [activeTab, setActiveTab] = useState<TabId>("chat");
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
-  const [vault, setVault] = useState<Vault | null>(null);
-  const [isVaultScanning, setIsVaultScanning] = useState(false);
+  const [caseData, setCaseData] = useState<Case | null>(null);
+  const [isCaseScanning, setIsVaultScanning] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   // Health polling
   const failCountRef = useRef(0);
 
-  const checkVaultStatus = useCallback(async () => {
+  const checkCaseStatus = useCallback(async () => {
     try {
-      const docsData = await getDocuments(vaultId);
+      const docsData = await getDocuments(caseId);
       const scanning = docsData.documents.some(d => d.status === "pending" || d.status === "processing");
       setIsVaultScanning(scanning);
     } catch (err) {
       console.error("Status check failed:", err);
     }
-  }, [vaultId]);
+  }, [caseId]);
 
   useEffect(() => {
     const poll = async () => {
@@ -103,75 +105,66 @@ export default function VaultWorkspace({
         if (failCountRef.current >= 2) setBackendOnline(false);
       }
       
-      // Also check vault document status during health check
-      checkVaultStatus();
+      // Also check case document status during health check
+      checkCaseStatus();
     };
 
     poll(); 
     const interval = setInterval(poll, 5000); // More frequent during active workspace
 
-    getVault(vaultId).then(setVault).catch(console.error);
+    getCase(caseId).then(setCaseData).catch(console.error);
 
     return () => clearInterval(interval);
-  }, [vaultId, checkVaultStatus]);
+  }, [caseId, checkCaseStatus]);
 
   return (
     <div className="h-screen flex flex-col bg-primary">
-      {/* Case Header: Command Center Style */}
-      <header className="flex h-16 items-center justify-between px-6 border-b border-border-default bg-secondary/80 backdrop-blur-md sticky top-0 z-40">
-        <div className="flex items-center gap-4">
-          {/* Breadcrumb Navigation */}
+      {/* Balanced Header: Elite Identity Bar */}
+      <header className="flex h-20 items-center justify-between px-6 border-b border-border-default bg-secondary/80 backdrop-blur-md sticky top-0 z-40">
+        <div className="flex items-center gap-2 overflow-hidden">
+          {/* Subtle Back Link */}
           <Link
             href="/"
-            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-text-muted hover:text-text-primary transition-all group"
+            className="p-1.5 hover:bg-bg-elevated rounded-lg text-text-muted hover:text-text-primary transition-all group shrink-0"
+            title="Back to Dashboard"
           >
-            <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
-            Dashboard
+            <ArrowLeft size={20} className="group-hover:-translate-x-0.5 transition-transform" />
           </Link>
-          
-          <div className="h-4 w-px bg-border-subtle" />
 
-          {/* Case Identity */}
-          <div className="flex items-center gap-3">
-            <div className="flex flex-col justify-center leading-none">
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm font-black uppercase tracking-tight text-text-primary flex items-center gap-2">
-                  {vault?.debtor_entity || vault?.name || "Initializing workspace..."}
-                </h1>
-                {vault && (
-                  <div className="flex items-center gap-1.5 ml-1">
-                    <VaultStatusBadge vault={vault} readOnly={true} />
-                    <button
-                      onClick={() => setIsEditModalOpen(true)}
-                      className="p-1.5 hover:bg-bg-elevated rounded-lg text-text-muted hover:text-accent-blue transition-all"
-                      title="Edit Case Intelligence"
-                    >
-                      <Pencil size={12} />
-                    </button>
-                  </div>
-                )}
-              </div>
+          {/* Identity Block: [Name] over [Evidence Tag] */}
+          <div className="flex items-center gap-4 overflow-hidden ml-1">
+            <div className="flex flex-col justify-center gap-0.5">
+              <h1 className="text-lg font-black text-text-primary whitespace-nowrap truncate max-w-[320px] lg:max-w-xl tracking-tight leading-tight">
+                {caseData?.debtor_entity || caseData?.name || "Initializing workspace..."}
+              </h1>
               
-              {vault?.case_number && (
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[10px] font-mono font-bold text-text-muted opacity-60 flex items-center gap-1 uppercase tracking-wider">
-                    <Hash size={10} />
-                    {vault.case_number}
-                  </span>
-                  <span className="h-1 w-1 rounded-full bg-border-default" />
-                  <span className="text-[9px] font-bold text-text-muted opacity-40 uppercase tracking-widest">
-                    ID: {vaultId.slice(0, 8)}
-                  </span>
+              {caseData?.case_number && (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-bg-elevated/50 border border-border-subtle text-[10px] font-mono font-bold text-text-muted/60 uppercase tracking-[0.1em] w-fit">
+                  <Hash size={10} className="opacity-40" />
+                  {caseData.case_number}
                 </div>
               )}
             </div>
+
+            {caseData && (
+              <div className="flex items-center gap-2 shrink-0 ml-1 mt-0.5">
+                <CaseStatusBadge caseData={caseData} readOnly={true} />
+                <button
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="p-1.5 hover:bg-bg-elevated rounded border border-transparent hover:border-border-default text-text-muted hover:text-accent-blue transition-all"
+                  title="Edit Case Intelligence"
+                >
+                  <Pencil size={14} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* Backend Agent Status: Isolated to right */}
+        <div className="flex gap-6 items-center">
+          {/* Professional Status Indicator */}
           <div className={cn(
-            "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all duration-500",
+            "hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all duration-500",
             backendOnline === null
               ? "bg-bg-secondary border-border-default text-text-muted"
               : backendOnline
@@ -185,15 +178,15 @@ export default function VaultWorkspace({
               <span className={cn(
                 "relative inline-flex rounded-full h-1.5 w-1.5",
                 backendOnline === null ? "bg-text-muted" :
-                backendOnline ? "bg-accent-emerald agent-working" :
+                backendOnline ? "bg-accent-emerald" :
                 "bg-accent-rose"
               )}></span>
             </div>
-            {backendOnline === null ? "Syncing..." : backendOnline ? "Agent Online" : "Agent Offline"}
+            {backendOnline === null ? "Syncing" : backendOnline ? "Agent Online" : "Agent Offline"}
           </div>
-
-          <div className="h-8 w-8 rounded-full bg-bg-elevated border border-border-default flex items-center justify-center text-[11px] font-black text-text-secondary uppercase">
-            {vault?.name?.slice(0, 1) || "K"}
+          
+          <div className="h-9 w-9 rounded-full bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-center text-[12px] font-black text-accent-blue uppercase shrink-0">
+            {caseData?.name?.slice(0, 1) || "K"}
           </div>
         </div>
       </header>
@@ -222,13 +215,13 @@ export default function VaultWorkspace({
       <main className="flex-1 overflow-hidden">
         {/* Keep Sources and Chat mounted to preserve state (like chat history and UI scrolls) */}
         <div className={activeTab === "sources" ? "h-full" : "hidden"}>
-          <SourcesTab vaultId={vaultId} />
+          <SourcesTab caseId={caseId} />
         </div>
         
         {activeTab === "chat" && (
           <div className="h-full">
             <ChatTab
-              vaultId={vaultId}
+              caseId={caseId}
               onViewSource={(citation) => setSelectedEvidence(citation)}
             />
           </div>
@@ -237,7 +230,7 @@ export default function VaultWorkspace({
         {activeTab === "search" && (
           <div className="h-full px-8 py-10 bg-primary overflow-y-auto">
             <DiscoveryTab 
-                vaultId={vaultId} 
+                caseId={caseId} 
                 onViewEvidence={(ev) => setSelectedEvidence(ev)} 
             />
           </div>
@@ -246,8 +239,8 @@ export default function VaultWorkspace({
         {activeTab === "claims" && (
           <div className="h-full px-6 py-6 bg-primary overflow-y-auto">
             <ClaimsTab 
-              vaultId={vaultId} 
-              isScanningOverride={isVaultScanning}
+              caseId={caseId} 
+              isScanningOverride={isCaseScanning}
               onViewEvidence={(claim) => {
                 if (claim.supporting_documents && claim.supporting_documents.length > 0) {
                   setSelectedEvidence({
@@ -265,23 +258,23 @@ export default function VaultWorkspace({
         {activeTab === "audit" && (
           <div className="h-full px-6 py-6 bg-primary overflow-y-auto">
             <AuditTab 
-              vaultId={vaultId} 
-              isScanningOverride={isVaultScanning}
+              caseId={caseId} 
+              isScanningOverride={isCaseScanning}
               onViewEvidence={(ev: Citation) => setSelectedEvidence(ev)}
             />
           </div>
         )}
         {activeTab === "intelligence" && (
           <div className="h-full px-6 py-6 bg-primary overflow-y-auto">
-            <CrossVaultTab 
-              vaultId={vaultId} 
+            <CrossCaseTab 
+              caseId={caseId} 
               onViewEvidence={(ev: Citation) => setSelectedEvidence(ev)}
             />
           </div>
         )}
         {activeTab === "outputs" && (
           <div className="h-full px-8 py-10 bg-primary overflow-y-auto">
-            <OutputsTab vaultId={vaultId} />
+            <OutputsTab caseId={caseId} />
           </div>
         )}
       </main>
@@ -294,13 +287,13 @@ export default function VaultWorkspace({
         />
       )}
 
-      {/* Edit Vault Modal */}
-      {vault && (
-        <EditVaultModal
-          vault={vault}
+      {/* Edit Case Modal */}
+      {caseData && (
+        <EditCaseModal
+          caseData={caseData}
           isOpen={isEditModalOpen}
           onClose={() => setIsEditModalOpen(false)}
-          onUpdate={setVault}
+          onUpdate={setCaseData}
         />
       )}
     </div>
@@ -311,8 +304,8 @@ export default function VaultWorkspace({
 // Sources Tab
 // ---------------------------------------------------------------------------
 
-function SourcesTab({ vaultId }: { vaultId: string }) {
-  const [documents, setDocuments] = useState<VaultDocument[]>([]);
+function SourcesTab({ caseId }: { caseId: string }) {
+  const [documents, setDocuments] = useState<CaseDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -322,7 +315,7 @@ function SourcesTab({ vaultId }: { vaultId: string }) {
 
   const fetchDocuments = useCallback(async () => {
     try {
-      const res = await getDocuments(vaultId);
+      const res = await getDocuments(caseId);
       setDocuments(res.documents);
       setError(null);
     } catch (err) {
@@ -330,7 +323,7 @@ function SourcesTab({ vaultId }: { vaultId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [vaultId]);
+  }, [caseId]);
 
   // Initial load
   useEffect(() => {
@@ -363,7 +356,7 @@ function SourcesTab({ vaultId }: { vaultId: string }) {
 
     for (const file of fileArr) {
       try {
-        const res = await uploadDocument(vaultId, file);
+        const res = await uploadDocument(caseId, file);
         setDocuments((prev) => [res.document, ...prev]);
       } catch (err) {
         setError(`Failed to upload "${file.name}": ${(err as Error).message}`);
@@ -380,7 +373,7 @@ function SourcesTab({ vaultId }: { vaultId: string }) {
     const confirmed = window.confirm(
       `PERMANENT DELETION WARNING\n\n` +
       `You are about to delete: ${fileName}\n\n` +
-      `This action will automatically PURGE all derived data from this vault, including:\n` +
+      `This action will automatically PURGE all derived data from this case, including:\n` +
       `• All Creditor Claims extracted from this file\n` +
       `• All Audit Flags and Contradictions linked to this evidence\n\n` +
       `This is required to maintain the systemic integrity of the legal workspace. Do you wish to proceed?`
@@ -449,7 +442,7 @@ function SourcesTab({ vaultId }: { vaultId: string }) {
       <div className="flex-1 space-y-2">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Vault Documents ({documents.length})
+            Case Documents ({documents.length})
           </h3>
           <button
             id="refresh-documents"
@@ -470,7 +463,7 @@ function SourcesTab({ vaultId }: { vaultId: string }) {
         ) : documents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <FileText size={32} className="text-text-muted mb-3 opacity-40" />
-            <p className="text-sm text-text-muted">No documents in this vault yet.</p>
+            <p className="text-sm text-text-muted">No documents in this case yet.</p>
             <p className="text-xs text-text-muted mt-1">Upload a PDF or Excel file to get started.</p>
           </div>
         ) : (
@@ -487,7 +480,7 @@ function DocumentRow({
   doc,
   onDelete,
 }: {
-  doc: VaultDocument;
+  doc: CaseDocument;
   onDelete: (id: string) => void;
 }) {
   const isExcel = doc.file_type.includes("spreadsheet") || doc.file_type.includes("excel") || doc.file_name.endsWith(".xlsx") || doc.file_name.endsWith(".xls");
@@ -555,20 +548,20 @@ interface LocalMessage {
   streaming?: boolean;
 }
 
-// We use the vaultId directly as the sessionId to create a global, shared workspace chat per Vault.
+// We use the caseId directly as the sessionId to create a global, shared workspace chat per Case.
 
 function ChatTab({ 
-  vaultId, 
+  caseId, 
   onViewSource 
 }: { 
-  vaultId: string;
+  caseId: string;
   onViewSource: (citation: Citation, index: number) => void;
 }) {
   const [messages, setMessages] = useState<LocalMessage[]>([
     {
       role: "assistant",
       content:
-        "Selamat datang di KuratorMind AI. Saya siap membantu Anda menganalisis dokumen vault ini.\n\nAnda dapat bertanya tentang:\n• Verifikasi dan detail klaim kreditur\n• Analisis laporan keuangan\n• Status dokumen yang telah diunggah\n• Regulasi kepailitan Indonesia\n\nApa yang ingin Anda periksa?",
+        "Selamat datang di KuratorMind AI. Saya siap membantu Anda menganalisis dokumen case ini.\n\nAnda dapat bertanya tentang:\n• Verifikasi dan detail klaim kreditur\n• Analisis laporan keuangan\n• Status dokumen yang telah diunggah\n• Regulasi kepailitan Indonesia\n\nApa yang ingin Anda periksa?",
       agent: "lead_orchestrator",
     },
   ]);
@@ -581,8 +574,8 @@ function ChatTab({
 
   // Initialize session + load history
   useEffect(() => {
-    if (!vaultId) return;
-    sessionId.current = vaultId;
+    if (!caseId) return;
+    sessionId.current = caseId;
 
     getChatHistory(sessionId.current)
       .then((res) => {
@@ -601,7 +594,7 @@ function ChatTab({
         console.error("Failed to load history:", err);
       })
       .finally(() => setHistoryLoaded(true));
-  }, [vaultId]);
+  }, [caseId]);
 
   // Auto-scroll on new messages or history load
   useEffect(() => {
@@ -628,7 +621,7 @@ function ChatTab({
     try {
       await streamChat(
         {
-          vault_id: vaultId,
+          case_id: caseId,
           session_id: sessionId.current,
           message: userText,
         },

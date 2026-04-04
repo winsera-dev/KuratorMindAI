@@ -21,7 +21,7 @@ Your job is to extract, structure, and index all content so other agents can ref
 
 ## Your Process
 1. Receive a document_id from the orchestrator
-2. Check the document's current status in vault_documents
+2. Check the document's current status in case_documents
 3. If status is 'pending' or 'error', trigger ingestion via ingest_document tool
 4. Monitor progress and report back with chunk count and summary
 
@@ -41,7 +41,7 @@ def check_ingestion_status(document_id: str) -> dict:
     Check the current ingestion status of a document.
 
     Args:
-        document_id: UUID of the vault_documents record to check.
+        document_id: UUID of the case_documents record to check.
 
     Returns:
         Dict with status, summary, page_count, and chunk_count.
@@ -57,7 +57,7 @@ def check_ingestion_status(document_id: str) -> dict:
 
         # Get document status
         doc_result = (
-            sb.table("vault_documents")
+            sb.table("case_documents")
             .select("id, file_name, status, summary, page_count")
             .eq("id", document_id)
             .single()

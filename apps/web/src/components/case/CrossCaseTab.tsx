@@ -21,12 +21,12 @@ import {
   type Citation 
 } from "@/types";
 
-interface CrossVaultTabProps {
-  vaultId: string;
+interface CrossCaseTabProps {
+  caseId: string;
   onViewEvidence: (evidence: Citation) => void;
 }
 
-export function CrossVaultTab({ vaultId, onViewEvidence }: CrossVaultTabProps) {
+export function CrossCaseTab({ caseId, onViewEvidence }: CrossCaseTabProps) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{
     conflicts: AuditFlag[];
@@ -37,11 +37,11 @@ export function CrossVaultTab({ vaultId, onViewEvidence }: CrossVaultTabProps) {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await getGlobalConflicts(vaultId);
+      const res = await getGlobalConflicts(caseId);
       setData(res);
       setError(null);
     } catch (err) {
-      setError("Failed to fetch cross-vault intelligence data.");
+      setError("Failed to fetch cross-case intelligence data.");
     } finally {
       setLoading(false);
     }
@@ -49,7 +49,7 @@ export function CrossVaultTab({ vaultId, onViewEvidence }: CrossVaultTabProps) {
 
   useEffect(() => {
     fetchData();
-  }, [vaultId]);
+  }, [caseId]);
 
   if (loading) {
     return (
@@ -67,7 +67,7 @@ export function CrossVaultTab({ vaultId, onViewEvidence }: CrossVaultTabProps) {
         <div>
           <h2 className="text-2xl font-bold text-text-primary flex items-center gap-2">
             <Fingerprint className="text-accent-cyan" size={24} />
-            Cross-Vault Intelligence
+            Cross-Case Intelligence
           </h2>
           <p className="text-sm text-text-muted mt-1">
             Detecting systemic fraud, repeated bankruptcies, and global conflicts of interest.
@@ -101,7 +101,7 @@ export function CrossVaultTab({ vaultId, onViewEvidence }: CrossVaultTabProps) {
             {data.conflicts.length === 0 ? (
               <div className="p-8 rounded-2xl bg-card border border-border-subtle text-center">
                 <ShieldAlert size={32} className="mx-auto text-text-muted mb-3 opacity-30" />
-                <p className="text-sm text-text-muted italic">No global conflicts detected for this vault.</p>
+                <p className="text-sm text-text-muted italic">No global conflicts detected for this case.</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -127,7 +127,7 @@ export function CrossVaultTab({ vaultId, onViewEvidence }: CrossVaultTabProps) {
                   Discovery Search across all cases
                 </p>
                 <p className="text-xs text-text-muted mt-1">
-                  Search legal strategies or document patterns from other insolvency vaults.
+                  Search legal strategies or document patterns from other insolvency cases.
                 </p>
               </div>
               <button 
@@ -173,7 +173,7 @@ export function CrossVaultTab({ vaultId, onViewEvidence }: CrossVaultTabProps) {
                     </div>
                     <p className="text-sm font-semibold text-text-primary mt-2">{entity.name}</p>
                     <div className="flex items-center justify-between mt-3 pt-2 border-t border-border-subtle">
-                       <span className="text-[10px] text-text-muted">Detected in 3+ vaults</span>
+                       <span className="text-[10px] text-text-muted">Detected in 3+ cases</span>
                        <button className="text-[10px] flex items-center gap-1 text-accent-cyan opacity-0 group-hover:opacity-100 transition-opacity">
                          Details <ChevronRight size={10} />
                        </button>
@@ -232,7 +232,7 @@ function ConflictCard({
                 })}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-elevated border border-border-default hover:bg-tertiary transition-all text-[11px] font-medium text-text-muted"
               >
-                <div className="w-4 h-4 rounded bg-accent-rose/20 flex items-center justify-center text-[9px] font-bold text-accent-rose">v.{ev.vault_id?.slice(0,4) || "S"}</div>
+                <div className="w-4 h-4 rounded bg-accent-rose/20 flex items-center justify-center text-[9px] font-bold text-accent-rose">v.{ev.case_id?.slice(0,4) || "S"}</div>
                 <span>View Evidence Snapshot</span>
                 <ExternalLink size={10} />
               </button>

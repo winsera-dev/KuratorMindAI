@@ -48,7 +48,7 @@ class ClaimUpdate(BaseModel):
 
 class ClaimResponse(ClaimBase):
     id: str
-    vault_id: str
+    case_id: str
     supporting_documents: Optional[List[str]] = []
     contradicting_evidence: Optional[List[Dict[str, Any]]] = []
     metadata: Optional[Dict[str, Any]] = {}
@@ -68,18 +68,18 @@ def _get_supabase() -> Client:
 # Routes
 # ------------------------------------------------------------
 
-@router.get("/claims/{vault_id}", response_model=dict)
-async def list_claims(vault_id: str):
-    """List all extracted creditor claims for a specific vault."""
+@router.get("/claims/{case_id}", response_model=dict)
+async def list_claims(case_id: str):
+    """List all extracted creditor claims for a specific case."""
     try:
         # Validate UUID format to prevent Supabase 22P02 errors
         import uuid
-        uuid.UUID(vault_id)
+        uuid.UUID(case_id)
         
         sb = _get_supabase()
         result = sb.table("claims")\
             .select("*")\
-            .eq("vault_id", vault_id)\
+            .eq("case_id", case_id)\
             .order("creditor_name")\
             .execute()
         
@@ -98,7 +98,7 @@ async def list_claims(vault_id: str):
             
         return {"claims": claims, "count": len(claims)}
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid Vault ID format.")
+        raise HTTPException(status_code=400, detail="Invalid Case ID format.")
     except Exception as exc:
         logger.error("List claims failed: %s", exc, exc_info=True)
         # Check for specific supabase/postgrest errors

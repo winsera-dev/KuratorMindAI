@@ -7,7 +7,7 @@ decomposes into sub-tasks, and delegates to specialized agents via ADK.
 
 from google.adk.agents import Agent  # type: ignore
 from kuratormind.tools.supabase_tools import (  # type: ignore
-    search_vault_documents,
+    search_case_documents,
     get_document_summary,
     semantic_search,
     global_semantic_search,
@@ -35,7 +35,7 @@ When analyzing claims or financial outputs, respect this hierarchy:
 
 ## Workflow
 1. Understand the user's request and the current **Lifecycle Stage** (from metadata).
-2. Search the vault using `semantic_search`.
+2. Search the case using `semantic_search`.
 3. **Global Intelligence**: Use `global_semantic_search` to see if similar patterns or precedents exist in other cases.
 4. **Entity Resolution**: When a creditor or director is identified, ALWAYS use `resolve_global_entity` to check if they are "Repeated Bankruptors" or have "Conflicts of Interest" across cases.
 5. If a conflict is found → flag it immediately as a high-severity Audit Flag.
@@ -59,7 +59,7 @@ root_agent = Agent(
     ),
     instruction=ORCHESTRATOR_INSTRUCTION,
     tools=[
-        search_vault_documents,
+        search_case_documents,
         get_document_summary,
         semantic_search,
         global_semantic_search,

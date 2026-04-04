@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 
 interface AuditTabProps {
-  vaultId: string;
+  caseId: string;
   isScanningOverride?: boolean;
   onViewEvidence?: (citation: Citation) => void;
 }
@@ -27,7 +27,7 @@ interface AuditTabProps {
  * Audit Tab Workspace
  * Orchestrates forensic flags, contradictions, and legal monitoring.
  */
-export function AuditTab({ vaultId, isScanningOverride, onViewEvidence }: AuditTabProps) {
+export function AuditTab({ caseId, isScanningOverride, onViewEvidence }: AuditTabProps) {
   const [flags, setFlags] = useState<AuditFlag[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -46,15 +46,15 @@ export function AuditTab({ vaultId, isScanningOverride, onViewEvidence }: AuditT
   const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
-      // 1. Check for processing documents in this vault (if not overridden)
+      // 1. Check for processing documents in this case (if not overridden)
       if (isScanningOverride === undefined) {
-        const docsData = await getDocuments(vaultId);
+        const docsData = await getDocuments(caseId);
         const processing = docsData.documents.some(d => d.status === "pending" || d.status === "processing");
         setIsScanning(processing);
       }
 
       // 2. Fetch flags
-      const data = await getAuditFlags(vaultId, severityFilter || undefined);
+      const data = await getAuditFlags(caseId, severityFilter || undefined);
       if (data && Array.isArray(data.flags)) {
         setFlags(data.flags);
       } else {
@@ -69,7 +69,7 @@ export function AuditTab({ vaultId, isScanningOverride, onViewEvidence }: AuditT
       setLoading(false);
       setRefreshing(false);
     }
-  }, [vaultId, severityFilter]);
+  }, [caseId, severityFilter]);
 
   useEffect(() => {
     fetchData();
@@ -248,7 +248,7 @@ export function AuditTab({ vaultId, isScanningOverride, onViewEvidence }: AuditT
           <button 
             onClick={() => {
                 // This would navigate to chat with a pre-filled prompt or open a specific report modal
-                window.location.href = `/dashboard/vault/${vaultId}/chat?trigger=report`;
+                window.location.href = `/dashboard/case/${caseId}/chat?trigger=report`;
             }}
             className="flex items-center gap-2 px-4 py-2 bg-accent-cyan text-black rounded-xl text-xs font-black hover:bg-accent-cyan/90 transition-all shadow-lg shadow-accent-cyan/20 uppercase tracking-tight active:scale-95"
           >

@@ -13,22 +13,22 @@ import {
   Activity,
   Loader2
 } from "lucide-react";
-import { createVault } from "@/lib/api";
-import { VaultStage } from "@/types";
+import { createCase } from "@/lib/api";
+import { CaseStage } from "@/types";
 
-interface CreateVaultModalProps {
+interface CreateCaseModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   userId: string;
 }
 
-export default function CreateVaultModal({ 
+export default function CreateCaseModal({ 
   isOpen, 
   onClose, 
   onSuccess, 
   userId 
-}: CreateVaultModalProps) {
+}: CreateCaseModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,9 +60,9 @@ export default function CreateVaultModal({
     setError(null);
 
     try {
-      await createVault({
+      await createCase({
         ...formData,
-        stage: formData.stage as VaultStage,
+        stage: formData.stage as CaseStage,
         user_id: userId,
         bankruptcy_date: formData.bankruptcy_date || undefined,
         stage_started_at: formData.bankruptcy_date || undefined,
@@ -70,7 +70,7 @@ export default function CreateVaultModal({
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err.message || "Failed to create vault");
+      setError(err.message || "Failed to create case");
     } finally {
       setLoading(false);
     }
@@ -101,7 +101,7 @@ export default function CreateVaultModal({
                 <div>
                   <h2 className="text-xl font-bold flex items-center gap-2">
                     <Plus className="w-5 h-5 text-accent-blue" />
-                    New Forensic Vault
+                    New Forensic Case
                   </h2>
                   <p className="text-sm text-text-secondary mt-1">Initiate a new insolvency or PKPU case Workspace.</p>
                 </div>

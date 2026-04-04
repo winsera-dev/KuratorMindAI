@@ -15,14 +15,14 @@ import {
   AlertCircle,
   FileText as FileIcon
 } from "lucide-react";
-import { getVaultStats } from "@/lib/api";
+import { getCaseStats } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-interface VaultCardProps {
-  vault: any;
+interface CaseCardProps {
+  caseData: any;
 }
 
-export default function VaultCard({ vault }: VaultCardProps) {
+export default function CaseCard({ caseData }: CaseCardProps) {
   const [stats, setStats] = useState<{
     document_count: number;
     total_claims_idr: number;
@@ -33,16 +33,16 @@ export default function VaultCard({ vault }: VaultCardProps) {
   useEffect(() => {
     async function fetchStats() {
       try {
-        const s = await getVaultStats(vault.id);
+        const s = await getCaseStats(caseData.id);
         setStats(s);
       } catch (err) {
-        console.error("Failed to fetch stats for vault:", vault.id, err);
+        console.error("Failed to fetch stats for case:", caseData.id, err);
       } finally {
         setLoading(false);
       }
     }
     fetchStats();
-  }, [vault.id]);
+  }, [caseData.id]);
 
   // Indonesian Currency Formatter (Global Standard Abbreviation)
   const formatIDR = (num: number) => {
@@ -58,20 +58,20 @@ export default function VaultCard({ vault }: VaultCardProps) {
 
   return (
     <Link
-      href={`/vault/${vault.id}`}
+      href={`/case/${caseData.id}`}
       className="group block bg-bg-card border border-border-default rounded-2xl p-6 hover:border-accent-blue/50 transition-all hover:shadow-xl hover:shadow-accent-blue/5 relative overflow-hidden h-full"
     >
       {/* Top Row: Case Metadata */}
       <div className="flex items-start justify-between mb-4">
         <div className="space-y-1 min-w-0">
           <span className="text-[10px] font-black uppercase tracking-widest text-text-muted opacity-60">
-            Case #{vault.case_number || "PENDING"}
+            Case #{caseData.case_number || "PENDING"}
           </span>
           <h3 className="text-lg font-black group-hover:text-accent-blue transition-colors truncate">
-            {vault.name}
+            {caseData.name}
           </h3>
           <p className="text-[11px] text-text-secondary font-bold uppercase tracking-tight truncate opacity-80">
-            {vault.debtor_entity || "Undisclosed Entity"}
+            {caseData.debtor_entity || "Undisclosed Entity"}
           </p>
         </div>
         <div className="w-10 h-10 rounded-xl bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-muted group-hover:text-accent-blue group-hover:bg-accent-blue/5 transition-all shrink-0">
@@ -81,7 +81,7 @@ export default function VaultCard({ vault }: VaultCardProps) {
 
       {/* Description */}
       <p className="text-sm text-text-secondary line-clamp-2 mb-6 h-10">
-        {vault.description || "No case description provided yet."}
+        {caseData.description || "No case description provided yet."}
       </p>
 
       {/* Stats Row */}
@@ -134,27 +134,27 @@ export default function VaultCard({ vault }: VaultCardProps) {
         <div className="flex items-center gap-2">
           <div className={cn(
             "w-2 h-2 rounded-full",
-            (vault.stage === "bankrupt" || vault.stage === "terminated") && "bg-accent-rose",
-            vault.stage === "pkpu_temp" && "bg-accent-amber",
-            vault.stage === "pkpu_permanent" && "bg-accent-blue",
-            vault.stage === "liquidation" && "bg-accent-orange",
-            (vault.stage === "homologasi" || vault.stage === "closed") && "bg-accent-emerald",
-            (!vault.stage || vault.stage === "petition") && "bg-text-muted"
+            (caseData.stage === "bankrupt" || caseData.stage === "terminated") && "bg-accent-rose",
+            caseData.stage === "pkpu_temp" && "bg-accent-amber",
+            caseData.stage === "pkpu_permanent" && "bg-accent-blue",
+            caseData.stage === "liquidation" && "bg-accent-orange",
+            (caseData.stage === "homologasi" || caseData.stage === "closed") && "bg-accent-emerald",
+            (!caseData.stage || caseData.stage === "petition") && "bg-text-muted"
           )} />
           <span className={cn(
             "text-xs font-black uppercase tracking-tight",
-            (vault.stage === "bankrupt" || vault.stage === "terminated") && "text-accent-rose",
-            vault.stage === "pkpu_temp" && "text-accent-amber",
-            vault.stage === "pkpu_permanent" && "text-accent-blue",
-            vault.stage === "liquidation" && "text-accent-orange",
-            (vault.stage === "homologasi" || vault.stage === "closed") && "text-accent-emerald",
-            (!vault.stage || vault.stage === "petition") && "text-text-muted"
+            (caseData.stage === "bankrupt" || caseData.stage === "terminated") && "text-accent-rose",
+            caseData.stage === "pkpu_temp" && "text-accent-amber",
+            caseData.stage === "pkpu_permanent" && "text-accent-blue",
+            caseData.stage === "liquidation" && "text-accent-orange",
+            (caseData.stage === "homologasi" || caseData.stage === "closed") && "text-accent-emerald",
+            (!caseData.stage || caseData.stage === "petition") && "text-text-muted"
           )}>
-            {vault.stage?.replace('_', ' ') || 'ACTIVE'}
+            {caseData.stage?.replace('_', ' ') || 'ACTIVE'}
           </span>
         </div>
         <div className="text-[10px] font-bold text-text-muted bg-bg-primary px-2 py-0.5 rounded border border-border-subtle uppercase tracking-wider">
-           {vault.court_name || "Commercial Court"}
+           {caseData.court_name || "Commercial Court"}
         </div>
       </div>
 

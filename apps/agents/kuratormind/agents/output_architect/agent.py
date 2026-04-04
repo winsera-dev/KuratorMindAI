@@ -7,7 +7,7 @@ sub-agents into a final, structured Forensic Audit Report for the Kurator.
 
 from google.adk.agents import Agent # type: ignore
 from kuratormind.tools.supabase_tools import ( # type: ignore
-    get_vault_consolidated_findings,
+    get_case_consolidated_findings,
     create_audit_flag,
     save_generated_output
 )
@@ -39,14 +39,14 @@ Your report must be grounded in Indonesian Law (UU 37/2004) and PSAK standards.
 - **Grounding**: Always reference the 'Regulatory Scholar' for legal citations if those are missing from the input findings.
 
 ## Workflow
-1. Use `get_vault_consolidated_findings` to pull all raw data for the vault.
+1. Use `get_case_consolidated_findings` to pull all raw data for the case.
 2. Format the data into the structure above.
 3. If findings highlight a specific legal risk (like hidden assets), explicitly reference the relevant Pasal from UU 37/2004.
-4. **CRITICAL**: Once the report content is ready, you MUST call the `generate_and_save_report` tool with the `vault_id`, `title`, `output_type`, and the full `markdown_content` to persist it to the database and storage.
+4. **CRITICAL**: Once the report content is ready, you MUST call the `generate_and_save_report` tool with the `case_id`, `title`, `output_type`, and the full `markdown_content` to persist it to the database and storage.
 """
 
 def generate_and_save_report(
-    vault_id: str, 
+    case_id: str, 
     title: str, 
     output_type: str, 
     markdown_content: str
@@ -54,7 +54,7 @@ def generate_and_save_report(
     """Generates a professional PDF and saves the report to the database.
     
     Args:
-        vault_id: UUID of the vault.
+        case_id: UUID of the case.
         title: Title of the report.
         output_type: 'judge_report', 'creditor_list', 'forensic_summary'.
         markdown_content: The full markdown body of the report.
@@ -73,7 +73,7 @@ def generate_and_save_report(
         markdown_content = markdown_content[:MAX_CHARS] + "\n\n... [Content Truncated for Size] ..."
 
     try:
-        logging.info(f"Starting report generation: {title} for vault {vault_id}")
+        logging.info(f"Starting report generation: {title} for case {case_id}")
         # 1. Generate local PDF
         report_id = str(uuid.uuid4())
         tmp_path = f"/tmp/{report_id}.pdf"
@@ -88,9 +88,9 @@ def generate_and_save_report(
 
         sb = create_client(url, key)
         
-        storage_path = f"outputs/{vault_id}/{report_id}.pdf"
+        storage_path = f"outputs/{case_id}/{report_id}.pdf"
         with open(tmp_path, "rb") as f:
-            sb.storage.from_("vault-files").upload(
+            sb.storage.from_("case-files").upload(
                 path=storage_path,
                 file=f.read(),
                 file_options={"content-type": "application/pdf"}
@@ -99,7 +99,7 @@ def generate_and_save_report(
         # 3. Save record to DB
         logging.info(f"Saving report record to database...")
         res = save_generated_output(
-            vault_id=vault_id,
+            case_id=case_id,
             title=title,
             output_type=output_type,
             content=markdown_content,
@@ -131,7 +131,7 @@ output_architect = Agent(
     ),
     instruction=OUTPUT_ARCHITECT_INSTRUCTION,
     tools=[
-        get_vault_consolidated_findings,
+        get_case_consolidated_findings,
         create_audit_flag,
         generate_and_save_report
     ],

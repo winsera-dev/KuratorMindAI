@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 import { Search, FileText, Loader2, Info, ChevronRight, CornerDownRight, Gavel } from "lucide-react";
-import { searchVault, searchRegulations, SearchResponse } from "@/lib/api";
+import { searchCase, searchRegulations, SearchResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface DiscoveryTabProps {
-  vaultId: string;
+  caseId: string;
   onViewEvidence: (evidence: any) => void;
 }
 
@@ -14,12 +14,12 @@ interface DiscoveryTabProps {
  * Forensic Discovery Tab
  * A high-powered semantic search interface for cross-document analysis.
  */
-export function DiscoveryTab({ vaultId, onViewEvidence }: DiscoveryTabProps) {
+export function DiscoveryTab({ caseId, onViewEvidence }: DiscoveryTabProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResponse["results"]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [searchMode, setSearchMode] = useState<"vault" | "regulations">("vault");
+  const [searchMode, setSearchMode] = useState<"case" | "regulations">("case");
 
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -28,8 +28,8 @@ export function DiscoveryTab({ vaultId, onViewEvidence }: DiscoveryTabProps) {
     setLoading(true);
     setHasSearched(true);
     try {
-      const response = searchMode === "vault" 
-        ? await searchVault(vaultId, query)
+      const response = searchMode === "case" 
+        ? await searchCase(caseId, query)
         : await searchRegulations(query);
       setResults(response.results);
     } catch (err) {
@@ -46,10 +46,10 @@ export function DiscoveryTab({ vaultId, onViewEvidence }: DiscoveryTabProps) {
         <div className="flex items-center justify-center">
             <div className="inline-flex p-1 bg-secondary rounded-2xl border border-border-default shadow-sm">
                 <button 
-                  onClick={() => { setSearchMode("vault"); setResults([]); setHasSearched(false); }}
+                  onClick={() => { setSearchMode("case"); setResults([]); setHasSearched(false); }}
                   className={cn(
                     "flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
-                    searchMode === "vault" ? "bg-card text-text-primary shadow-sm" : "text-text-muted hover:text-text-secondary"
+                    searchMode === "case" ? "bg-card text-text-primary shadow-sm" : "text-text-muted hover:text-text-secondary"
                   )}
                 >
                     <FileText size={14} />
@@ -74,13 +74,13 @@ export function DiscoveryTab({ vaultId, onViewEvidence }: DiscoveryTabProps) {
             searchMode === "regulations" ? "border-accent-cyan/30" : "border-border-default"
           )}>
             <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-text-muted group-focus-within:text-accent-cyan transition-colors">
-              {searchMode === "vault" ? <Search size={20} /> : <Gavel size={20} className="text-accent-cyan" />}
+              {searchMode === "case" ? <Search size={20} /> : <Gavel size={20} className="text-accent-cyan" />}
             </div>
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={searchMode === "vault" 
+              placeholder={searchMode === "case" 
                 ? "Cari bukti forensic... (Contoh: 'Hutang pajak' atau 'Aliran dana')" 
                 : "Cari dasar hukum... (Contoh: 'Actio Pauliana' atau 'Priority Debt')"
               }
@@ -92,7 +92,7 @@ export function DiscoveryTab({ vaultId, onViewEvidence }: DiscoveryTabProps) {
                 disabled={loading || !query.trim()}
                 className={cn(
                     "px-5 py-2.5 font-bold rounded-2xl text-sm transition-all shadow-md active:scale-95",
-                    searchMode === "vault" 
+                    searchMode === "case" 
                         ? "bg-accent-blue text-white shadow-accent-blue/20" 
                         : "bg-accent-cyan text-black shadow-accent-cyan/20"
                 )}
@@ -129,7 +129,7 @@ export function DiscoveryTab({ vaultId, onViewEvidence }: DiscoveryTabProps) {
                 key={res.id} 
                 className={cn(
                     "group relative overflow-hidden bg-card border rounded-2xl p-5 transition-all cursor-pointer",
-                    searchMode === "vault" ? "hover:border-accent-cyan/50" : "hover:border-accent-cyan/80 bg-accent-cyan/[0.02]"
+                    searchMode === "case" ? "hover:border-accent-cyan/50" : "hover:border-accent-cyan/80 bg-accent-cyan/[0.02]"
                 )}
                 onClick={() => onViewEvidence({
                     chunk_id: res.id,
@@ -142,14 +142,14 @@ export function DiscoveryTab({ vaultId, onViewEvidence }: DiscoveryTabProps) {
                 <div className="flex items-start gap-4">
                   <div className={cn(
                     "mt-1 w-8 h-8 rounded-lg flex items-center justify-center transition-colors shrink-0",
-                    searchMode === "vault" ? "bg-secondary text-accent-cyan group-hover:bg-accent-blue group-hover:text-white" : "bg-accent-cyan/20 text-accent-cyan group-hover:bg-accent-cyan group-hover:text-black"
+                    searchMode === "case" ? "bg-secondary text-accent-cyan group-hover:bg-accent-blue group-hover:text-white" : "bg-accent-cyan/20 text-accent-cyan group-hover:bg-accent-cyan group-hover:text-black"
                   )}>
-                    {searchMode === "vault" ? <FileText size={16} /> : <Gavel size={16} />}
+                    {searchMode === "case" ? <FileText size={16} /> : <Gavel size={16} />}
                   </div>
                   <div className="flex-1 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-text-secondary uppercase tracking-tight line-clamp-1">
-                        {res.file_name || (searchMode === "regulations" ? "Global Legal Vault" : "Unknown Source")}
+                        {res.file_name || (searchMode === "regulations" ? "Global Legal Case" : "Unknown Source")}
                       </span>
                       {res.page_number && (
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-text-muted font-bold">
@@ -163,7 +163,7 @@ export function DiscoveryTab({ vaultId, onViewEvidence }: DiscoveryTabProps) {
                     <div className="flex items-center justify-between pt-1">
                         <div className="flex items-center gap-1.5 text-accent-cyan opacity-0 group-hover:opacity-100 transition-opacity">
                             <span className="text-[10px] font-black uppercase tracking-widest">
-                                {searchMode === "vault" ? "View Evidence" : "Cite Regulation"}
+                                {searchMode === "case" ? "View Evidence" : "Cite Regulation"}
                             </span>
                             <CornerDownRight size={10} />
                         </div>
@@ -185,7 +185,7 @@ export function DiscoveryTab({ vaultId, onViewEvidence }: DiscoveryTabProps) {
             </div>
             <div>
               <h3 className="font-bold text-text-primary">
-                {searchMode === "vault" ? "No forensic matches found" : "No regulatory matches found"}
+                {searchMode === "case" ? "No forensic matches found" : "No regulatory matches found"}
               </h3>
               <p className="text-sm text-text-muted max-w-xs mx-auto">Try broadening your search term or asking a direct legal question.</p>
             </div>
@@ -193,7 +193,7 @@ export function DiscoveryTab({ vaultId, onViewEvidence }: DiscoveryTabProps) {
         ) : (
           <div className="h-64 flex flex-col items-center justify-center text-center space-y-6">
             <div className="grid grid-cols-2 gap-3 max-w-lg w-full">
-                {(searchMode === "vault" 
+                {(searchMode === "case" 
                     ? ["Audit atas Hutang Pajak", "Aset dialihkan (Actio Pauliana)", "Rasio Solvabilitas Q4", "Kontradiksi Invoice"]
                     : ["UU 37/2004 Pasal 41", "Hak Tanggungan PKPU", "Priority Payments Law", "PSAK 71 Impairment"]
                 ).map((hint) => (

@@ -31,10 +31,10 @@ const formatDate = (dateStr: string) => {
 };
 
 interface OutputsTabProps {
-  vaultId: string;
+  caseId: string;
 }
 
-export function OutputsTab({ vaultId }: OutputsTabProps) {
+export function OutputsTab({ caseId }: OutputsTabProps) {
   const [outputs, setOutputs] = useState<GeneratedOutput[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
@@ -43,7 +43,7 @@ export function OutputsTab({ vaultId }: OutputsTabProps) {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getGeneratedOutputs(vaultId);
+      const data = await getGeneratedOutputs(caseId);
       setOutputs(data);
       setError(null);
     } catch (err) {
@@ -52,7 +52,7 @@ export function OutputsTab({ vaultId }: OutputsTabProps) {
     } finally {
       setLoading(false);
     }
-  }, [vaultId]);
+  }, [caseId]);
 
   useEffect(() => {
     fetchData();
@@ -61,7 +61,7 @@ export function OutputsTab({ vaultId }: OutputsTabProps) {
   const handleGenerate = async (type: OutputType, title: string) => {
     setGenerating(type);
     try {
-      await generateReport(vaultId, type, title);
+      await generateReport(caseId, type, title);
       // Wait a bit and refresh (or the agent will update the DB)
       setTimeout(fetchData, 5000); 
     } catch (err) {
@@ -74,7 +74,7 @@ export function OutputsTab({ vaultId }: OutputsTabProps) {
   const handleDownload = async (output: GeneratedOutput) => {
     if (!output.file_path) return;
     try {
-      const url = await getOutputSignedUrl(vaultId, output.file_path);
+      const url = await getOutputSignedUrl(caseId, output.file_path);
       window.open(url, "_blank");
     } catch (err) {
       console.error("Download failed:", err);
@@ -169,7 +169,7 @@ export function OutputsTab({ vaultId }: OutputsTabProps) {
       <section className="flex-1 min-h-0 flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <div className="space-y-1">
-            <h2 className="text-xl font-black text-text-primary uppercase tracking-tight">Vault Archive</h2>
+            <h2 className="text-xl font-black text-text-primary uppercase tracking-tight">Case Archive</h2>
             <p className="text-sm text-text-muted">Access and download previous audit versions.</p>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/50 rounded-lg border border-border-default">

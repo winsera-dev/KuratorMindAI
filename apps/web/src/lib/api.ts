@@ -6,8 +6,8 @@
  */
 
 import { 
-  Vault, 
-  VaultDocument, 
+  Case, 
+  CaseDocument, 
   ChatMessage, 
   Citation,
   Claim,
@@ -21,8 +21,8 @@ import { createClient } from "@/lib/supabase/client";
 const supabase = createClient();
 
 export type { 
-  Vault, 
-  VaultDocument, 
+  Case, 
+  CaseDocument, 
   ChatMessage, 
   Citation,
   Claim,
@@ -36,11 +36,11 @@ const BASE_URL =
 // Response Types
 export interface UploadResponse {
   message: string;
-  document: VaultDocument;
+  document: CaseDocument;
 }
 
 export interface DocumentsResponse {
-  documents: VaultDocument[];
+  documents: CaseDocument[];
   count: number;
 }
 
@@ -77,66 +77,66 @@ export interface StreamEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Vaults API
+// Cases API
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch all vaults for the current authenticated user.
+ * Fetch all cases for the current authenticated user.
  */
-export async function getVaults(): Promise<Vault[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/vaults`);
-  if (!res.ok) throw new Error("Failed to fetch vaults");
+export async function getCases(): Promise<Case[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/cases`);
+  if (!res.ok) throw new Error("Failed to fetch cases");
   const data = await res.json();
-  return data.vaults;
+  return data.cases;
 }
 
 /**
- * Fetch a single vault by ID.
+ * Fetch a single case by ID.
  */
-export async function getVault(vaultId: string): Promise<Vault> {
-  const res = await fetch(`${BASE_URL}/api/v1/vaults/${vaultId}`);
-  if (!res.ok) throw new Error("Failed to fetch vault");
+export async function getCase(caseId: string): Promise<Case> {
+  const res = await fetch(`${BASE_URL}/api/v1/cases/${caseId}`);
+  if (!res.ok) throw new Error("Failed to fetch case");
   return res.json();
 }
 
 /**
- * Create a new forensic vault.
+ * Create a new forensic case.
  */
-export async function createVault(vault: Partial<Vault>): Promise<Vault> {
-  const res = await fetch(`${BASE_URL}/api/v1/vaults`, {
+export async function createCase(caseData: Partial<Case>): Promise<Case> {
+  const res = await fetch(`${BASE_URL}/api/v1/cases`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(vault),
+    body: JSON.stringify(caseData),
   });
-  if (!res.ok) throw new Error("Failed to create vault");
+  if (!res.ok) throw new Error("Failed to create case");
   return res.json();
 }
 /**
- * Update an existing forensic vault (e.g. Stage transition).
+ * Update an existing forensic case (e.g. Stage transition).
  */
-export async function updateVault(
-  vaultId: string,
-  updates: Partial<Vault>
-): Promise<Vault> {
-  const res = await fetch(`${BASE_URL}/api/v1/vaults/${vaultId}`, {
+export async function updateCase(
+  caseId: string,
+  updates: Partial<Case>
+): Promise<Case> {
+  const res = await fetch(`${BASE_URL}/api/v1/cases/${caseId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates),
   });
-  if (!res.ok) throw new Error("Failed to update vault");
+  if (!res.ok) throw new Error("Failed to update case");
   return res.json();
 }
 
 /**
- * Get aggregated statistics for a vault.
+ * Get aggregated statistics for a case.
  */
-export async function getVaultStats(vaultId: string): Promise<{
+export async function getCaseStats(caseId: string): Promise<{
   document_count: number;
   total_claims_idr: number;
   flag_count: number;
 }> {
-  const res = await fetch(`${BASE_URL}/api/v1/vaults/${vaultId}/stats`);
-  if (!res.ok) throw new Error("Failed to fetch vault stats");
+  const res = await fetch(`${BASE_URL}/api/v1/cases/${caseId}/stats`);
+  if (!res.ok) throw new Error("Failed to fetch case stats");
   return res.json();
 }
 
@@ -145,15 +145,15 @@ export async function getVaultStats(vaultId: string): Promise<{
 // ---------------------------------------------------------------------------
 
 /**
- * Upload a file to a vault. Returns the created document record immediately.
+ * Upload a file to a case. Returns the created document record immediately.
  * Ingestion runs in the background — poll getDocuments() to track status.
  */
 export async function uploadDocument(
-  vaultId: string,
+  caseId: string,
   file: File,
 ): Promise<UploadResponse> {
   const form = new FormData();
-  form.append("vault_id", vaultId);
+  form.append("case_id", caseId);
   form.append("file", file);
 
   const res = await fetch(`${BASE_URL}/api/v1/documents/upload`, {
@@ -170,12 +170,12 @@ export async function uploadDocument(
 }
 
 /**
- * List all documents in a vault, ordered by most recent.
+ * List all documents in a case, ordered by most recent.
  */
 export async function getDocuments(
-  vaultId: string,
+  caseId: string,
 ): Promise<DocumentsResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/documents/${vaultId}`);
+  const res = await fetch(`${BASE_URL}/api/v1/documents/${caseId}`);
   if (!res.ok) throw new Error("Failed to fetch documents");
   return res.json() as Promise<DocumentsResponse>;
 }
@@ -210,13 +210,13 @@ export async function getDocumentSignedUrl(documentId: string): Promise<{
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch all extracted claims for aSpecific vault.
+ * Fetch all extracted claims for aSpecific case.
  */
-export async function getClaims(vaultId: string): Promise<{
+export async function getClaims(caseId: string): Promise<{
   claims: Claim[];
   count: number;
 }> {
-  const res = await fetch(`${BASE_URL}/api/v1/claims/${vaultId}`);
+  const res = await fetch(`${BASE_URL}/api/v1/claims/${caseId}`);
   if (!res.ok) throw new Error("Failed to fetch claims");
   return res.json();
 }
@@ -237,10 +237,10 @@ export async function updateClaim(
 }
 
 /**
- * Lists forensic red flags for a vault.
+ * Lists forensic red flags for a case.
  */
 export async function getAuditFlags(
-  vaultId: string, 
+  caseId: string, 
   severity?: string, 
   resolved?: boolean
 ): Promise<{ flags: any[]; count: number }> {
@@ -248,7 +248,7 @@ export async function getAuditFlags(
   if (severity) params.append("severity", severity);
   if (resolved !== undefined) params.append("resolved", String(resolved));
   
-  const url = `${BASE_URL}/api/v1/audit/flags/${vaultId}?${params.toString()}`;
+  const url = `${BASE_URL}/api/v1/audit/flags/${caseId}?${params.toString()}`;
   console.log(`[Forensic Agent] Fetching flags: ${url}`);
   
   const res = await fetch(url);
@@ -283,17 +283,17 @@ export async function updateAuditFlag(
 // ---------------------------------------------------------------------------
 
 /**
- * Perform a semantic search across a vault's documents.
+ * Perform a semantic search across a case's documents.
  */
-export async function searchVault(
-  vaultId: string, 
+export async function searchCase(
+  caseId: string, 
   query: string, 
   topK: number = 10
 ): Promise<SearchResponse> {
   const res = await fetch(`${BASE_URL}/api/v1/search`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ vault_id: vaultId, query, top_k: topK }),
+    body: JSON.stringify({ case_id: caseId, query, top_k: topK }),
   });
   
   if (!res.ok) {
@@ -306,14 +306,14 @@ export async function searchVault(
 
 /**
  * Global Regulatory Search
- * Searches the Global Legal & PSAK Vault (ID: 0000...)
+ * Searches the Global Legal & PSAK Case (ID: 0000...)
  */
 export async function searchRegulations(query: string): Promise<SearchResponse> {
   const res = await fetch(`${BASE_URL}/api/v1/search`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ 
-      vault_id: "00000000-0000-0000-0000-000000000000", 
+      case_id: "00000000-0000-0000-0000-000000000000", 
       query, 
       top_k: 5 
     }),
@@ -331,7 +331,7 @@ export async function searchRegulations(query: string): Promise<SearchResponse> 
  * Generate Forensic Audit Report
  * Direct trigger for the Output Architect swarm.
  */
-export async function generateForensicReport(vaultId: string): Promise<{
+export async function generateForensicReport(caseId: string): Promise<{
     session_id: string;
     message: string;
     status: string;
@@ -340,8 +340,8 @@ export async function generateForensicReport(vaultId: string): Promise<{
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            vault_id: vaultId,
-            message: "Generate a consolidated Forensic Audit Report for this vault. Summarize all findings, claims, and financial anomalies.",
+            case_id: caseId,
+            message: "Generate a consolidated Forensic Audit Report for this case. Summarize all findings, claims, and financial anomalies.",
             agent_override: "output_architect" 
         }),
     });
@@ -359,15 +359,15 @@ export async function generateForensicReport(vaultId: string): Promise<{
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch all generated documents for a vault.
+ * Fetch all generated documents for a case.
  */
 export async function getGeneratedOutputs(
-  vaultId: string
+  caseId: string
 ): Promise<GeneratedOutput[]> {
   const { data, error } = await supabase
     .from("generated_outputs")
     .select("*")
-    .eq("vault_id", vaultId)
+    .eq("case_id", caseId)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -379,7 +379,7 @@ export async function getGeneratedOutputs(
  * Uses the Chat API internally with the output_architect override.
  */
 export async function generateReport(
-  vaultId: string,
+  caseId: string,
   type: string,
   title: string
 ): Promise<{ success: boolean; message: string }> {
@@ -387,7 +387,7 @@ export async function generateReport(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      vault_id: vaultId,
+      case_id: caseId,
       message: `Generate a professional ${type} with the title '${title}'. Consolidate all forensic findings, claims, and financial anomalies.`,
       agent_override: "output_architect"
     }),
@@ -410,7 +410,7 @@ export async function generateReport(
  * we poll for a record with a recent created_at timestamp.
  */
 export async function waitForReport(
-  vaultId: string,
+  caseId: string,
   type: string,
   timeoutMs: number = 60000
 ): Promise<GeneratedOutput> {
@@ -421,7 +421,7 @@ export async function waitForReport(
     const { data, error } = await supabase
       .from("generated_outputs")
       .select("*")
-      .eq("vault_id", vaultId)
+      .eq("case_id", caseId)
       .eq("output_type", type)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -446,9 +446,9 @@ export async function waitForReport(
 /**
  * Generate a signed URL for a generated output (PDF).
  */
-export async function getOutputSignedUrl(vaultId: string, filePath: string): Promise<string> {
+export async function getOutputSignedUrl(caseId: string, filePath: string): Promise<string> {
   const { data, error } = await supabase.storage
-    .from("vault-files")
+    .from("case-files")
     .createSignedUrl(filePath, 3600); // 1 hour
 
   if (error) throw error;
@@ -464,7 +464,7 @@ export async function getOutputSignedUrl(vaultId: string, filePath: string): Pro
  */
 export async function streamChat(
   request: {
-    vault_id: string;
+    case_id: string;
     session_id: string;
     message: string;
     user_id?: string;
@@ -557,10 +557,10 @@ export async function checkHealth(): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 1D: Cross-Vault Intelligence
+// Phase 1D: Cross-Case Intelligence
 // ---------------------------------------------------------------------------
 
-export async function getGlobalConflicts(vaultId: string): Promise<{
+export async function getGlobalConflicts(caseId: string): Promise<{
   conflicts: AuditFlag[];
   entities: GlobalEntity[];
 }> {
@@ -569,18 +569,18 @@ export async function getGlobalConflicts(vaultId: string): Promise<{
     .from("audit_flags")
     .select("*")
     .or("flag_type.eq.conflict_of_interest,flag_type.eq.entity_duplicate")
-    .eq("vault_id", vaultId);
+    .eq("case_id", caseId);
 
   if (flagErr) throw flagErr;
 
-  // 2. Fetch global occurrences for this vault
+  // 2. Fetch global occurrences for this case
   const { data: occurrences, error: occErr } = await supabase
     .from("entity_occurrences")
     .select(`
       *,
       global_entities (*)
     `)
-    .eq("vault_id", vaultId);
+    .eq("case_id", caseId);
 
   if (occErr) throw occErr;
 

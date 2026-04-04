@@ -21,7 +21,7 @@ router = APIRouter()
 # ------------------------------------------------------------
 
 class AuditFlagBase(BaseModel):
-    vault_id: str
+    case_id: str
     severity: str    # critical, high, medium, low
     flag_type: str   # contradiction, actio_pauliana, entity_duplicate, etc.
     title: str
@@ -52,15 +52,15 @@ def _get_supabase() -> Client:
 # Routes
 # ------------------------------------------------------------
 
-@router.get("/audit/flags/{vault_id}", response_model=dict)
+@router.get("/audit/flags/{case_id}", response_model=dict)
 async def list_audit_flags(
-    vault_id: str, 
+    case_id: str, 
     severity: Optional[str] = Query(None),
     resolved: Optional[bool] = Query(None)
 ):
-    """List forensic red flags for a specific vault."""
+    """List forensic red flags for a specific case."""
     sb = _get_supabase()
-    query = sb.table("audit_flags").select("*").eq("vault_id", vault_id)
+    query = sb.table("audit_flags").select("*").eq("case_id", case_id)
     
     if severity:
         query = query.eq("severity", severity)

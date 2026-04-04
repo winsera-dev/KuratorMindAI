@@ -38,15 +38,15 @@ def _get_supabase() -> Client:
 @router.post("/documents/upload")
 async def upload_document(
     background_tasks: BackgroundTasks,
-    vault_id: Annotated[str, Form()],
+    case_id: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
 ):
     """
-    Upload a document to a vault.
+    Upload a document to a case.
 
     1. Validate file type + size
-    2. Upload to Supabase Storage (vault-files/{vault_id}/{doc_id}/{filename})
-    3. Insert a vault_documents record (status: pending)
+    2. Upload to Supabase Storage (case-files/{case_id}/{doc_id}/{filename})
+    3. Insert a case_documents record (status: pending)
     4. Schedule background ingestion task
     5. Return the new document record immediately
     """
@@ -85,11 +85,11 @@ async def upload_document(
     document_id = str(uuid.uuid4())
     # Supabase Storage rejects keys with spaces/special chars — keep only safe chars
     safe_name = re.sub(r"[^\w.\-]", "_", file_name, flags=re.ASCII)
-    file_path = f"{vault_id}/{document_id}/{safe_name}"
+    file_path = f"{case_id}/{document_id}/{safe_name}"
 
     try:
         # Upload to Supabase Storage
-        sb.storage.from_("vault-files").upload(
+        sb.storage.from_("case-files").upload(
             path=file_path,
             file=file_bytes,
             file_options={"content-type": content_type},
@@ -98,10 +98,10 @@ async def upload_document(
         logger.error("Storage upload failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Storage upload failed: {exc}")
 
-    # Insert vault_documents record
+    # Insert case_documents record
     doc_record = {
         "id": document_id,
-        "vault_id": vault_id,
+        "case_id": case_id,
         "file_name": file_name,
         "file_type": content_type or ext,
         "file_path": file_path,
@@ -113,7 +113,7 @@ async def upload_document(
     }
 
     try:
-        result = sb.table("vault_documents").insert(doc_record).execute()
+        result = sb.table("case_documents").insert(doc_record).execute()
         inserted = result.data[0] if result.data else doc_record
     except Exception as exc:
         logger.error("DB insert failed: %s", exc, exc_info=True)
@@ -123,7 +123,7 @@ async def upload_document(
     background_tasks.add_task(
         ingest_document,
         document_id=document_id,
-        vault_id=vault_id,
+        case_id=case_id,
         storage_path=file_path,
         file_name=file_name,
         file_type=content_type or ext,
@@ -135,10 +135,10 @@ async def upload_document(
     }
 
 
-@router.get("/documents/{vault_id}")
-async def list_documents(vault_id: str):
+@router.get("/documents/{case_id}")
+async def list_documents(case_id: str):
     """
-    List all documents in a vault, ordered by upload date.
+    List all documents in a case, ordered by upload date.
     
     Returns document metadata. Check 'status' for ingestion progress:
     - pending: Upload received, ingestion not yet started
@@ -149,12 +149,12 @@ async def list_documents(vault_id: str):
     sb = _get_supabase()
     try:
         result = (
-            sb.table("vault_documents")
+            sb.table("case_documents")
             .select(
                 "id, file_name, file_type, status, summary, page_count, "
                 "file_path, file_size, metadata, created_at"
             )
-            .eq("vault_id", vault_id)
+            .eq("case_id", case_id)
             .order("created_at", desc=True)
             .execute()
         )
@@ -166,13 +166,13 @@ async def list_documents(vault_id: str):
 
 @router.delete("/documents/{document_id}")
 async def delete_document(document_id: str):
-    """Delete a document and all its chunks from the vault."""
+    """Delete a document and all its chunks from the case."""
     sb = _get_supabase()
     try:
         # Fetch the document first for storage path
         doc = (
-            sb.table("vault_documents")
-            .select("file_path, vault_id")
+            sb.table("case_documents")
+            .select("file_path, case_id")
             .eq("id", document_id)
             .single()
             .execute()
@@ -181,7 +181,7 @@ async def delete_document(document_id: str):
             raise HTTPException(status_code=404, detail="Document not found.")
 
         storage_path = doc.data.get("file_path")
-        vault_id = doc.data.get("vault_id")
+        case_id = doc.data.get("case_id")
 
         # Delete chunks
         sb.table("document_chunks").delete().eq("document_id", document_id).execute()
@@ -195,9 +195,9 @@ async def delete_document(document_id: str):
                 sb.table("claims").delete().eq("id", c["id"]).execute()
             
             # 2. Robust Cleanup for Audit Flags
-            # We fetch all flags for the vault and manually filter in Python to be 100% sure
-            if vault_id:
-                flags_res = sb.table("audit_flags").select("id, evidence").eq("vault_id", vault_id).execute()
+            # We fetch all flags for the case and manually filter in Python to be 100% sure
+            if case_id:
+                flags_res = sb.table("audit_flags").select("id, evidence").eq("case_id", case_id).execute()
                 for f in flags_res.data:
                     evidence = f.get("evidence") or []
                     # Check if any evidence item links to this document
@@ -215,12 +215,12 @@ async def delete_document(document_id: str):
         # Delete from storage
         if storage_path:
             try:
-                sb.storage.from_("vault-files").remove([storage_path])
+                sb.storage.from_("case-files").remove([storage_path])
             except Exception as exc_storage:
                 logger.warning("Storage deletion failed (continuing): %s", exc_storage)
 
         # Delete the document record
-        sb.table("vault_documents").delete().eq("id", document_id).execute()
+        sb.table("case_documents").delete().eq("id", document_id).execute()
 
         return {"success": True, "deleted_document_id": document_id}
 
@@ -240,7 +240,7 @@ async def get_document_signed_url(document_id: str, expires_in: int = 3600):
     try:
         # Fetch the document record for the storage path
         doc = (
-            sb.table("vault_documents")
+            sb.table("case_documents")
             .select("file_path, file_name, file_type")
             .eq("id", document_id)
             .single()
@@ -254,7 +254,7 @@ async def get_document_signed_url(document_id: str, expires_in: int = 3600):
             raise HTTPException(status_code=400, detail="Document has no file path.")
 
         # Generate signed URL (public bucket)
-        res = sb.storage.from_("vault-files").create_signed_url(
+        res = sb.storage.from_("case-files").create_signed_url(
             path=file_path,
             expires_in=expires_in
         )

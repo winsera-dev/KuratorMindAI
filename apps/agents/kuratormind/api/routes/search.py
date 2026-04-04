@@ -1,7 +1,7 @@
 """
 KuratorMind AI — Search API Route
 
-Standalone endpoint for semantic (vector) search across a vault's documents.
+Standalone endpoint for semantic (vector) search across a case's documents.
 Used by the 'Discovery' tab to find forensic evidence.
 """
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 class SearchRequest(BaseModel):
-    vault_id: str
+    case_id: str
     query: str
     top_k: Optional[int] = 10
 
@@ -34,14 +34,14 @@ class SearchResponse(BaseModel):
     fallback: bool = False
 
 @router.post("/search", response_model=SearchResponse)
-async def vault_search(request: SearchRequest):
+async def case_search(request: SearchRequest):
     """
-    Perform a semantic search across all document chunks in a vault.
+    Perform a semantic search across all document chunks in a case.
     Returns ranked results with citations.
     """
     try:
         search_results = semantic_search(
-            vault_id=request.vault_id,
+            case_id=request.case_id,
             query=request.query,
             top_k=request.top_k or 10
         )

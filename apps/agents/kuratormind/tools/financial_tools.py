@@ -13,7 +13,7 @@ from kuratormind.services.accounting import (  # type: ignore
 from kuratormind.tools.supabase_tools import _get_supabase, semantic_search  # type: ignore
 
 def analyze_financial_data(
-    vault_id: str,
+    case_id: str,
     current_assets: float,
     current_liabilities: float,
     total_assets: float,
@@ -29,7 +29,7 @@ def analyze_financial_data(
     Calculates ratios, identifies anomalies, and persists results to Supabase.
     
     Args:
-        vault_id: UUID of the vault.
+        case_id: UUID of the case.
         current_assets: Total current assets (Lancar).
         current_liabilities: Total short-term liabilities (Jangka Pendek).
         total_assets: Total assets.
@@ -61,7 +61,7 @@ def analyze_financial_data(
         # 2. Persist to Supabase
         sb = _get_supabase()
         analysis_record = {
-            "vault_id": vault_id,
+            "case_id": case_id,
             "document_id": document_id,
             "report_type": "consolidated",
             "period": period,
@@ -82,7 +82,7 @@ def analyze_financial_data(
         return {"error": str(e), "analysis": None}
 
 def log_accounting_red_flag(
-    vault_id: str,
+    case_id: str,
     title: str,
     description: str,
     severity: str = "medium",
@@ -93,7 +93,7 @@ def log_accounting_red_flag(
     Record an accounting-specific red flag (anomaly, audit exception).
     
     Args:
-        vault_id: UUID of the vault.
+        case_id: UUID of the case.
         title: Title of the flag (e.g. 'Neraca Tidak Seimbang').
         description: Forensic explanation of the flag.
         severity: 'critical', 'high', 'medium', 'low'.
@@ -103,7 +103,7 @@ def log_accounting_red_flag(
     try:
         sb = _get_supabase()
         data = {
-            "vault_id": vault_id,
+            "case_id": case_id,
             "title": title,
             "description": description,
             "severity": severity,
@@ -117,7 +117,7 @@ def log_accounting_red_flag(
         return {"error": str(e)}
 
 def analyze_financial_integrity(
-    vault_id: str,
+    case_id: str,
     target_period: str = "Last 12 Months",
     focus_areas: List[str] = ["Solvency", "Balance Sheet", "Income"]
 ) -> Dict[str, Any]:
@@ -127,17 +127,17 @@ def analyze_financial_integrity(
     and checks for insolvency indicators and PSAK compliance.
     
     Args:
-        vault_id: UUID of the vault to scan.
+        case_id: UUID of the case to scan.
         target_period: The accounting period to focus on.
         focus_areas: specific parts of financial statements to prioritize.
     """
     try:
         # 1. Search for financial statements
         query = f"Laporan Keuangan Neraca Laba Rugi Balance Sheet Income Statement {target_period}"
-        search_results = semantic_search(vault_id=vault_id, query=query, limit=5)
+        search_results = semantic_search(case_id=case_id, query=query, limit=5)
         
         if not search_results.get("results"):
-            return {"error": "No financial documents found in this vault.", "results": []}
+            return {"error": "No financial documents found in this case.", "results": []}
             
         # 2. Return findings to the agent so it can extract values using its LLM
         # The agent will then call `analyze_financial_data` with the extracted values.

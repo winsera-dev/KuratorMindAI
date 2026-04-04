@@ -212,7 +212,7 @@ def _generate_summary(full_text: str, file_name: str) -> str:
 
 def ingest_document(
     document_id: str,
-    vault_id: str,
+    case_id: str,
     storage_path: str,
     file_name: str,
     file_type: str,
@@ -221,9 +221,9 @@ def ingest_document(
     Full ingestion pipeline for a single document.
 
     Args:
-        document_id:  UUID of the vault_documents record.
-        vault_id:     UUID of the parent vault.
-        storage_path: Path within vault-files Storage bucket.
+        document_id:  UUID of the case_documents record.
+        case_id:     UUID of the parent case.
+        storage_path: Path within case-files Storage bucket.
         file_name:    Original filename (for display + summary).
         file_type:    MIME type string, e.g. 'application/pdf'.
 
@@ -236,14 +236,14 @@ def ingest_document(
     logger.info("=" * 60)
 
     # 1. Mark as processing
-    sb.table("vault_documents").update({"status": "processing"}).eq(
+    sb.table("case_documents").update({"status": "processing"}).eq(
         "id", document_id
     ).execute()
 
     try:
         # 2. Download from Supabase Storage
         logger.info("Downloading %s from storage…", storage_path)
-        raw = sb.storage.from_("vault-files").download(storage_path)
+        raw = sb.storage.from_("case-files").download(storage_path)
         file_bytes: bytes = raw if isinstance(raw, bytes) else bytes(raw)
 
         # 3. Extract text
@@ -280,7 +280,7 @@ def ingest_document(
             {
                 "id": str(uuid.uuid4()),
                 "document_id": document_id,
-                "vault_id": vault_id,
+                "case_id": case_id,
                 "content": chunk["content"],
                 "chunk_index": chunk["chunk_index"],
                 "page_number": chunk["page_number"],
@@ -302,7 +302,7 @@ def ingest_document(
         summary = _generate_summary(full_text, file_name)
 
         # 9. Update status to processing for Audit phase
-        sb.table("vault_documents").update(
+        sb.table("case_documents").update(
             {
                 "status": "processing",
                 "summary": "Analysing document for forensic claims and audit flags...",
@@ -314,7 +314,7 @@ def ingest_document(
         
         # 10. Trigger Claim Audit (Forensic review)
         try:
-            _trigger_claim_audit(vault_id, document_id, file_name)
+            _trigger_claim_audit(case_id, document_id, file_name)
         except Exception as e:
             logger.error("Claim audit failed: %s", e)
         
@@ -322,12 +322,12 @@ def ingest_document(
         is_financial = any(x in file_name.lower() for x in ["neraca", "laba rugi", "balance sheet", "p&l", "financial"])
         if is_financial:
             try:
-                _trigger_financial_audit(vault_id, document_id, file_name)
+                _trigger_financial_audit(case_id, document_id, file_name)
             except Exception as e:
                 logger.error("Financial audit failed: %s", e)
 
         # 12. Finalize status to ready
-        sb.table("vault_documents").update(
+        sb.table("case_documents").update(
             {
                 "status": "ready",
                 "summary": summary,
@@ -338,13 +338,13 @@ def ingest_document(
 
     except Exception as exc:
         logger.error("Ingestion failed for %s: %s", document_id, exc, exc_info=True)
-        sb.table("vault_documents").update(
+        sb.table("case_documents").update(
             {"status": "error", "summary": str(exc)}
         ).eq("id", document_id).execute()
         return {"success": False, "chunks_created": 0, "error": str(exc)}
 
 
-def _trigger_claim_audit(vault_id: str, document_id: str, file_name: str):
+def _trigger_claim_audit(case_id: str, document_id: str, file_name: str):
     """
     Triggers the forensic claim audit using direct GenAI client.
     """
@@ -354,7 +354,7 @@ def _trigger_claim_audit(vault_id: str, document_id: str, file_name: str):
     logger.info("Triggering forensic claim audit for: %s", file_name)
     
     # 1. Fetch context using semantic search
-    context_res = semantic_search(vault_id, f"creditor claims and debt details in {file_name}", top_k=15)
+    context_res = semantic_search(case_id, f"creditor claims and debt details in {file_name}", top_k=15)
     chunks = context_res.get("results", [])
     context_text = "\n".join([f"SOURCE: {c.get('content')}" for c in chunks])
 
@@ -362,7 +362,7 @@ def _trigger_claim_audit(vault_id: str, document_id: str, file_name: str):
     client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
     
     prompt = (
-        f"You are a forensic auditor reviewing '{file_name}' in vault '{vault_id}'.\n"
+        f"You are a forensic auditor reviewing '{file_name}' in case '{case_id}'.\n"
         "DOCUMENT CONTENT:\n"
         f"{context_text}\n\n"
         "MANDATORY TASK:\n"
@@ -388,7 +388,7 @@ def _trigger_claim_audit(vault_id: str, document_id: str, file_name: str):
                 "parameters": {
                     "type": "OBJECT",
                     "properties": {
-                        "vault_id": {"type": "STRING"},
+                        "case_id": {"type": "STRING"},
                         "creditor_name": {"type": "STRING"},
                         "claim_amount": {"type": "NUMBER"},
                         "claim_type": {"type": "STRING", "enum": ["preferential", "secured", "concurrent"]},
@@ -396,7 +396,7 @@ def _trigger_claim_audit(vault_id: str, document_id: str, file_name: str):
                         "legal_basis": {"type": "STRING"},
                         "source_document_id": {"type": "STRING"}
                     },
-                    "required": ["vault_id", "creditor_name", "claim_amount", "claim_type"]
+                    "required": ["case_id", "creditor_name", "claim_amount", "claim_type"]
                 }
             },
             {
@@ -404,14 +404,14 @@ def _trigger_claim_audit(vault_id: str, document_id: str, file_name: str):
                 "parameters": {
                     "type": "OBJECT",
                     "properties": {
-                        "vault_id": {"type": "STRING"},
+                        "case_id": {"type": "STRING"},
                         "title": {"type": "STRING"},
                         "description": {"type": "STRING"},
                         "severity": {"type": "STRING", "enum": ["critical", "high", "medium", "low"]},
                         "flag_type": {"type": "STRING", "enum": ["contradiction", "actio_pauliana", "entity_duplicate", "non_compliance", "anomaly", "inflated_claim"]},
                         "source_document_id": {"type": "STRING"}
                     },
-                    "required": ["vault_id", "title", "severity"]
+                    "required": ["case_id", "title", "severity"]
                 }
             }
         ]}]
@@ -436,7 +436,7 @@ def _trigger_claim_audit(vault_id: str, document_id: str, file_name: str):
                     args = part.function_call.args or {}
                     
                     # SYSTEMIC ENFORCEMENT: Force system IDs regardless of LLM output
-                    args["vault_id"] = vault_id
+                    args["case_id"] = case_id
                     args["source_document_id"] = document_id
                     
                     logger.info("Agent calling tool: %s with enforced IDs", name)
@@ -449,7 +449,7 @@ def _trigger_claim_audit(vault_id: str, document_id: str, file_name: str):
     except Exception as e:
         logger.error("Forensic audit failed for %s: %s", file_name, e)
 
-def _trigger_financial_audit(vault_id: str, document_id: str, file_name: str):
+def _trigger_financial_audit(case_id: str, document_id: str, file_name: str):
     """
     Triggers the forensic financial analysis using direct GenAI client.
     """
