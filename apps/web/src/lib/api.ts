@@ -146,6 +146,18 @@ export async function updateCase(
 }
 
 /**
+ * Delete a forensic case.
+ */
+export async function deleteCase(caseId: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/api/v1/cases/${caseId}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to delete case");
+}
+
+/**
  * Get aggregated statistics for a case.
  */
 export async function getCaseStats(caseId: string): Promise<{

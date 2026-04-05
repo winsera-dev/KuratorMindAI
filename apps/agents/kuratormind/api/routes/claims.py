@@ -6,12 +6,13 @@ Handles creditor claim management, verification, and forensic audit status.
 
 import logging
 import os
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Annotated
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
+from kuratormind.api.deps import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -69,7 +70,10 @@ def _get_supabase() -> Client:
 # ------------------------------------------------------------
 
 @router.get("/claims/{case_id}", response_model=dict)
-async def list_claims(case_id: str):
+async def list_claims(
+    case_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
     """List all extracted creditor claims for a specific case."""
     try:
         # Validate UUID format to prevent Supabase 22P02 errors
@@ -77,6 +81,12 @@ async def list_claims(case_id: str):
         uuid.UUID(case_id)
         
         sb = _get_supabase()
+        
+        # Ownership check: verify case belongs to current_user
+        case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+        if not case.data or case.data.get("user_id") != current_user:
+            raise HTTPException(status_code=403, detail="Access denied to this case.")
+
         result = sb.table("claims")\
             .select("*")\
             .eq("case_id", case_id)\
@@ -144,4 +154,3 @@ async def update_claim(
     except Exception as exc:
         logger.error("Update claim failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
-eption(status_code=500, detail=str(exc))

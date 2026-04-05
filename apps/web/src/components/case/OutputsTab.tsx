@@ -1,8 +1,13 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { getGeneratedOutputs, generateReport, getOutputSignedUrl } from "@/lib/api";
+import { 
+  getGeneratedOutputs, 
+  generateReport, 
+  getOutputSignedUrl 
+} from "@/lib/api";
 import { GeneratedOutput, OutputType } from "@/types";
+import { toast } from "sonner";
 import { 
   FileText, 
   Download, 
@@ -62,12 +67,15 @@ export function OutputsTab({ caseId, documentCount = 0 }: OutputsTabProps) {
   const handleGenerate = async (type: OutputType, title: string) => {
     if (documentCount === 0) return; // guard: no documents
     setGenerating(type);
+    toast.info(`Generating ${title}...`, { id: "gen" });
     try {
       await generateReport(caseId, type, title);
+      toast.success(`${title} generated successfully`, { id: "gen" });
       // Wait a bit and refresh (or the agent will update the DB)
       setTimeout(fetchData, 5000); 
-    } catch (err) {
+    } catch (err: any) {
       console.error("Manual generation failed:", err);
+      toast.error(`Generation failed: ${err.message || "Unknown error"}`, { id: "gen" });
     } finally {
       setGenerating(null);
     }

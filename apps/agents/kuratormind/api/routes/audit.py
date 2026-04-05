@@ -6,12 +6,13 @@ Handles forensic red flags, logical contradictions, and legal risk monitoring.
 
 import logging
 import os
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Annotated
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
+from kuratormind.api.deps import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -83,16 +84,24 @@ async def list_audit_flags(
         raise HTTPException(status_code=500, detail=str(exc))
 
 @router.patch("/audit/flags/{flag_id}", response_model=AuditFlagResponse)
-async def update_audit_flag(flag_id: str, updates: AuditFlagUpdate):
+async def update_audit_flag(
+    flag_id: str, 
+    updates: AuditFlagUpdate,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
     """Update flag resolution status or notes."""
     sb = _get_supabase()
     update_data = updates.dict(exclude_unset=True)
     
     try:
-        # Verify flag exists
-        existing = sb.table("audit_flags").select("id").eq("id", flag_id).execute()
+        # Verify flag exists and belongs to user's case
+        existing = sb.table("audit_flags").select("id, case_id, cases(user_id)").eq("id", flag_id).execute()
         if not existing.data:
             raise HTTPException(status_code=404, detail="Audit flag not found.")
+        
+        case_owner = (existing.data[0].get("cases") or {}).get("user_id")
+        if case_owner and case_owner != current_user:
+            raise HTTPException(status_code=403, detail="Access denied.")
             
         result = sb.table("audit_flags")\
             .update(update_data)\

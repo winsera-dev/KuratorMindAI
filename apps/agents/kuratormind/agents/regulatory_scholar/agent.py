@@ -44,12 +44,12 @@ You collaborate with the Claim Auditor to create `audit_flags`:
 
 regulatory_scholar = Agent(
     name="regulatory_scholar",
-    instructions=REGULATORY_SCHOLAR_INSTRUCTION,
+    instruction=REGULATORY_SCHOLAR_INSTRUCTION,
     tools=[
         search_regulations,
         sync_legal_knowledge,
         scrape_and_index_regulation,
         create_audit_flag
     ],
-    model_id="gemini-2.0-pro-exp-02-05",
+    model="gemini-2.0-flash",
 )

@@ -16,9 +16,10 @@ import {
   Save,
   FileText
 } from "lucide-react";
-import { createCase, updateCase } from "@/lib/api";
+import { createCase, updateCase, deleteCase } from "@/lib/api";
 import { Case, CaseStage } from "@/types";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const STAGE_OPTIONS: Record<CaseStage, string> = {
   petition: "Petition (Filing)",
@@ -111,18 +112,50 @@ export default function CaseModal({
           user_id: userId,
         });
         onSuccess(res);
+        toast.success("Workspace created successfully");
       } else {
         if (!initialData?.id) throw new Error("Case ID is required for update");
         const res = await updateCase(initialData.id, formData);
         onSuccess(res);
+        toast.success("Workspace updated successfully");
       }
       onClose();
     } catch (err: any) {
       setError(err.message || `Failed to ${mode} case`);
+      toast.error(err.message || `Failed to ${mode} case`);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleDelete = async () => {
+    if (!initialData?.id) return;
+    const confirmed = window.confirm(
+      "PERMANENT DELETION WARNING\n\n" +
+      "You are about to delete this case and all associated evidence, claims, and AI reports. This action cannot be undone.\n\n" +
+      "Are you sure you want to proceed?"
+    );
+    if (!confirmed) return;
+    
+    setLoading(true);
+    try {
+      await deleteCase(initialData.id);
+      toast.success("Workspace deleted permanently");
+      // Let the parent know to refresh
+      onSuccess();
+      onClose();
+      // Redirect to dashboard if we are on the case page
+      if (window.location.pathname.includes('/case/')) {
+        window.location.href = '/dashboard';
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to delete case");
+      toast.error(err.message || "Failed to delete case");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -313,34 +346,48 @@ export default function CaseModal({
                 </div>
 
                 {/* Footer Actions */}
-                <div className="pt-6 flex gap-4 justify-end items-center border-t border-border-subtle mt-8">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="px-6 py-3 rounded-xl text-text-muted hover:text-text-primary hover:bg-tertiary transition-all text-xs font-black uppercase tracking-widest"
-                    disabled={loading}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex-1 max-w-[240px] flex items-center justify-center gap-2 py-4 bg-white text-black rounded-xl hover:bg-white/90 active:scale-95 transition-all shadow-xl shadow-white/5 disabled:opacity-50"
-                  >
-                    {loading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : mode === "create" ? (
-                      <>
-                        <Plus className="w-5 h-5" />
-                        <span className="text-sm font-black uppercase tracking-tight">Create Workspace</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-5 h-5" />
-                        <span className="text-sm font-black uppercase tracking-tight">Update Intelligence</span>
-                      </>
-                    )}
-                  </button>
+                <div className="pt-6 flex gap-4 justify-between items-center border-t border-border-subtle mt-8">
+                  {mode === "edit" ? (
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      className="px-6 py-3 rounded-xl text-accent-rose hover:text-white hover:bg-accent-rose transition-all text-xs font-black uppercase tracking-widest border border-accent-rose/20"
+                      disabled={loading}
+                    >
+                      Delete Workspace
+                    </button>
+                  ) : (
+                    <div />
+                  )}
+                  <div className="flex gap-4 items-center">
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="px-6 py-3 rounded-xl text-text-muted hover:text-text-primary hover:bg-tertiary transition-all text-xs font-black uppercase tracking-widest"
+                      disabled={loading}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="flex-1 min-w-[200px] flex items-center justify-center gap-2 py-4 bg-white text-black rounded-xl hover:bg-white/90 active:scale-95 transition-all shadow-xl shadow-white/5 disabled:opacity-50"
+                    >
+                      {loading ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : mode === "create" ? (
+                        <>
+                          <Plus className="w-5 h-5" />
+                          <span className="text-sm font-black uppercase tracking-tight">Create Workspace</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-5 h-5" />
+                          <span className="text-sm font-black uppercase tracking-tight">Update Intelligence</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </form>
             </motion.div>

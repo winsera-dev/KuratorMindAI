@@ -131,85 +131,104 @@ export function ClaimsTable({
               </div>
             </header>
 
-            <div className="overflow-hidden bg-card rounded-2xl border border-border-default shadow-sm hover:shadow-md transition-shadow">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-border-default bg-secondary/30">
-                    <th className="px-5 py-3.5 text-xs font-semibold text-text-muted uppercase tracking-tight w-1/3">Creditor Name</th>
-                    <th className="px-5 py-3.5 text-xs font-semibold text-text-muted uppercase tracking-tight text-right">Amount (IDR)</th>
-                    <th className="px-5 py-3.5 text-xs font-semibold text-text-muted uppercase tracking-tight text-center">Confidence</th>
-                    <th className="px-5 py-3.5 text-xs font-semibold text-text-muted uppercase tracking-tight text-center">Status</th>
-                    <th className="px-5 py-3.5 text-xs font-semibold text-text-muted uppercase tracking-tight text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border-default/50">
-                  {list.map((claim) => (
-                    <tr key={claim.id} className="group hover:bg-elevated/50 transition-colors">
-                      <td className="px-5 py-4">
-                        <div className="font-semibold text-text-primary text-sm line-clamp-1">{claim.creditor_name}</div>
-                        <div className="text-[11px] text-text-muted mt-1 opacity-70 flex flex-wrap gap-x-3 gap-y-1 font-medium uppercase tracking-tight">
-                          <div className="flex items-center gap-1">
-                            <ShieldCheck size={11} className="text-accent-emerald shrink-0" />
-                            <span>AI Extracted — Ref: {claim.supporting_documents?.length || 0} docs</span>
-                          </div>
-                          {claim.legal_basis && (
-                            <div className="flex items-center gap-1 text-accent-cyan/80">
-                              <ShieldAlert size={11} className="shrink-0" />
-                              <span>Basis: {claim.legal_basis}</span>
-                            </div>
-                          )}
-                          {claim.global_entity_id && (
-                            <div className="flex items-center gap-1 text-accent-cyan animate-pulse">
-                              <Fingerprint size={11} className="shrink-0" />
-                              <span className="font-bold">Networked Entity</span>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        <div className="font-mono text-sm font-bold text-accent-blue tabular-nums">
-                          {formatCurrency(claim.claim_amount)}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex flex-col items-center gap-1.5">
-                          <div className="w-16 h-1 rounded-full bg-secondary overflow-hidden">
-                            <div 
-                              className={cn(
-                                "h-full transition-all duration-1000",
-                                (claim.confidence_score || 0) > 0.8 ? "bg-accent-emerald" : 
-                                (claim.confidence_score || 0) > 0.5 ? "bg-accent-amber" : "bg-accent-rose"
-                              )} 
-                              style={{ width: `${(claim.confidence_score || 0) * 100}%` }}
-                            />
-                          </div>
-                          <span className="text-[10px] font-bold text-text-muted tabular-nums">
-                            {Math.round((claim.confidence_score || 0) * 100)}%
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex justify-center">
-                          <StatusBadge status={claim.status} />
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        <button 
-                          onClick={() => onViewEvidence?.(claim)}
-                          className="p-2 text-text-muted hover:text-accent-cyan hover:bg-accent-cyan/10 rounded-lg transition-all"
-                          title="View Supporting Evidence"
-                        >
-                          <FileSearch2 size={18} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <PaginatedTableSection list={list} formatCurrency={formatCurrency} onViewEvidence={onViewEvidence} />
           </section>
         );
       })}
+    </div>
+  );
+}
+
+function PaginatedTableSection({ list, formatCurrency, onViewEvidence }: any) {
+  const [displayCount, setDisplayCount] = React.useState(50);
+  const visibleList = list.slice(0, displayCount);
+
+  return (
+    <div className="overflow-hidden bg-card rounded-2xl border border-border-default shadow-sm hover:shadow-md transition-shadow">
+      <table className="w-full text-left border-collapse">
+        <thead>
+          <tr className="border-b border-border-default bg-secondary/30">
+            <th className="px-5 py-3.5 text-xs font-semibold text-text-muted uppercase tracking-tight w-1/3">Creditor Name</th>
+            <th className="px-5 py-3.5 text-xs font-semibold text-text-muted uppercase tracking-tight text-right">Amount (IDR)</th>
+            <th className="px-5 py-3.5 text-xs font-semibold text-text-muted uppercase tracking-tight text-center">Confidence</th>
+            <th className="px-5 py-3.5 text-xs font-semibold text-text-muted uppercase tracking-tight text-center">Status</th>
+            <th className="px-5 py-3.5 text-xs font-semibold text-text-muted uppercase tracking-tight text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border-default/50">
+          {visibleList.map((claim: any) => (
+            <tr key={claim.id} className="group hover:bg-elevated/50 transition-colors">
+              <td className="px-5 py-4">
+                <div className="font-semibold text-text-primary text-sm line-clamp-1">{claim.creditor_name}</div>
+                <div className="text-[11px] text-text-muted mt-1 opacity-70 flex flex-wrap gap-x-3 gap-y-1 font-medium uppercase tracking-tight">
+                  <div className="flex items-center gap-1">
+                    <ShieldCheck size={11} className="text-accent-emerald shrink-0" />
+                    <span>AI Extracted — Ref: {claim.supporting_documents?.length || 0} docs</span>
+                  </div>
+                  {claim.legal_basis && (
+                    <div className="flex items-center gap-1 text-accent-cyan/80">
+                      <ShieldAlert size={11} className="shrink-0" />
+                      <span>Basis: {claim.legal_basis}</span>
+                    </div>
+                  )}
+                  {claim.global_entity_id && (
+                    <div className="flex items-center gap-1 text-accent-cyan animate-pulse">
+                      <Fingerprint size={11} className="shrink-0" />
+                      <span className="font-bold">Networked Entity</span>
+                    </div>
+                  )}
+                </div>
+              </td>
+              <td className="px-5 py-4 text-right">
+                <div className="font-mono text-sm font-bold text-accent-blue tabular-nums">
+                  {formatCurrency(claim.claim_amount)}
+                </div>
+              </td>
+              <td className="px-5 py-4">
+                <div className="flex flex-col items-center gap-1.5">
+                  <div className="w-16 h-1 rounded-full bg-secondary overflow-hidden">
+                    <div 
+                      className={cn(
+                        "h-full transition-all duration-1000",
+                        (claim.confidence_score || 0) > 0.8 ? "bg-accent-emerald" : 
+                        (claim.confidence_score || 0) > 0.5 ? "bg-accent-amber" : "bg-accent-rose"
+                      )} 
+                      style={{ width: `${(claim.confidence_score || 0) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] font-bold text-text-muted tabular-nums">
+                    {Math.round((claim.confidence_score || 0) * 100)}%
+                  </span>
+                </div>
+              </td>
+              <td className="px-5 py-4">
+                <div className="flex justify-center">
+                  <StatusBadge status={claim.status} />
+                </div>
+              </td>
+              <td className="px-5 py-4 text-right">
+                <button 
+                  onClick={() => onViewEvidence?.(claim)}
+                  className="p-2 text-text-muted hover:text-accent-cyan hover:bg-accent-cyan/10 rounded-lg transition-all"
+                  title="View Supporting Evidence"
+                >
+                  <FileSearch2 size={18} />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {list.length > displayCount && (
+        <div className="p-4 border-t border-border-default/50 bg-secondary/10 flex justify-center">
+          <button
+            onClick={() => setDisplayCount(prev => prev + 50)}
+            className="px-4 py-2 text-xs font-bold uppercase tracking-widest text-text-secondary hover:text-text-primary bg-card border border-border-default rounded-xl hover:border-accent-cyan/50 transition-all active:scale-95"
+          >
+            Show More ({list.length - displayCount} remaining)
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import {
   type CaseDocument 
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface SourcesTabProps {
   caseId: string;
@@ -81,13 +82,21 @@ export function SourcesTab({ caseId }: SourcesTabProps) {
     setUploading(true);
     setError(null);
 
+    let successCount = 0;
     for (const file of fileArr) {
       try {
         const res = await uploadDocument(caseId, file);
         setDocuments((prev) => [res.document, ...prev]);
-      } catch (err) {
-        setError(`Failed to upload "${file.name}": ${(err as Error).message}`);
+        successCount++;
+      } catch (err: any) {
+        const msg = err.message || "Unknown error";
+        setError(`Failed to upload "${file.name}": ${msg}`);
+        toast.error(`Upload failed: ${msg}`);
       }
+    }
+    
+    if (successCount > 0) {
+      toast.success(`Successfully uploaded ${successCount} document(s)`);
     }
 
     setUploading(false);
@@ -111,8 +120,10 @@ export function SourcesTab({ caseId }: SourcesTabProps) {
     try {
       await deleteDocument(docId);
       setDocuments((prev) => prev.filter((d) => d.id !== docId));
+      toast.success("Document and derived data deleted");
     } catch {
       setError("Failed to delete document.");
+      toast.error("Failed to delete document");
     }
   };
 

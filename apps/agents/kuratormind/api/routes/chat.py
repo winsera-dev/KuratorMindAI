@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import uuid
+import asyncio
 from typing import Any, AsyncGenerator, Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException  # type: ignore
@@ -457,15 +458,31 @@ async def chat(
                 
                 # We use generate_content for tool calls, and generate_content_stream for the final text response
                 # But to keep it simple and robust, we check for function calls first.
-                response = client.models.generate_content(
-                    model="models/gemini-flash-latest",
-                    contents=contents,
-                    config={
-                        "system_instruction": system_prompt,
-                        "temperature": 0.2,
-                        "tools": gemini_tools
-                    },
-                )
+                try:
+                    async with asyncio.timeout(60):
+                        response = await client.aio.models.generate_content(
+                            model="models/gemini-2.5-flash",
+                            contents=contents,
+                            config={
+                                "system_instruction": system_prompt,
+                                "temperature": 0.2,
+                                "tools": gemini_tools
+                            },
+                        )
+                except asyncio.TimeoutError:
+                    logger.error("Gemini API call timed out after 60 seconds")
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({"error": "Agent reasoning timed out. Please try again."}),
+                    }
+                    break
+                except Exception as e:
+                    logger.error(f"Gemini API call failed: {e}")
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({"error": f"Agent failed: {e}"}),
+                    }
+                    break
                 
                 candidate = response.candidates[0]
                 if not candidate.content or not candidate.content.parts:

@@ -83,7 +83,15 @@ async def upload_document(
         content_type = MIME_MAP.get(ext, "application/pdf")
 
     import re
+    import hashlib
     sb = _get_supabase()
+    
+    # Check for duplicate file using SHA-256
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+    existing = sb.table("case_documents").select("id").eq("case_id", case_id).eq("metadata->>file_hash", file_hash).execute()
+    if existing.data:
+        raise HTTPException(status_code=409, detail="Document already uploaded.")
+        
     document_id = str(uuid.uuid4())
     # Supabase Storage rejects keys with spaces/special chars — keep only safe chars
     safe_name = re.sub(r"[^\w.\-]", "_", file_name, flags=re.ASCII)
@@ -111,7 +119,7 @@ async def upload_document(
         "status": "pending",
         "page_count": None,
         "summary": None,
-        "metadata": {},
+        "metadata": {"file_hash": file_hash},
     }
 
     try:

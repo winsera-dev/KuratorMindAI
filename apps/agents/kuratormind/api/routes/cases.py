@@ -228,3 +228,24 @@ async def get_case(
     except Exception as exc:
         logger.error("Get case failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
+
+@router.delete("/cases/{case_id}")
+async def delete_case(
+    case_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
+    """Delete a forensic case — only if it belongs to the authenticated user."""
+    sb = _get_supabase()
+    try:
+        # Ownership check
+        case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+        if not case.data or case.data.get("user_id") != current_user:
+            raise HTTPException(status_code=404, detail="Case not found")
+            
+        result = sb.table("cases").delete().eq("id", case_id).execute()
+        return {"success": True, "message": "Case deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Delete case failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
