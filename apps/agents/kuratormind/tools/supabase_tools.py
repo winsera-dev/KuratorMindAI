@@ -133,7 +133,17 @@ def semantic_search(case_id: str, query: str, top_k: int = 10) -> dict:
             for chunk in chunks:
                 chunk["file_name"] = doc_map.get(chunk["document_id"], "Unknown")
 
-        return {"results": chunks, "count": len(chunks), "query": query}
+        # Calculate average similarity score for confidence metric
+        avg_similarity = 0.0
+        if chunks:
+            avg_similarity = sum(c.get("similarity", 0.0) for c in chunks) / len(chunks)
+
+        return {
+            "results": chunks, 
+            "count": len(chunks), 
+            "query": query,
+            "average_similarity": avg_similarity
+        }
 
     except Exception as exc:
         # Fallback: simple keyword search when no embeddings exist yet

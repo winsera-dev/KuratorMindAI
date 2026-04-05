@@ -132,19 +132,35 @@ export async function createCase(caseData: Partial<Case>): Promise<Case> {
   return res.json();
 }
 /**
- * Update an existing forensic case (e.g. Stage transition).
+ * Update an existing forensic case.
+ * Supports optimistic locking via expected_updated_at.
  */
 export async function updateCase(
   caseId: string,
-  updates: Partial<Case>
+  updates: Partial<Case> & { expected_updated_at?: string }
 ): Promise<Case> {
   const headers = await getAuthHeaders();
+  
+  // If expected_updated_at is provided, the backend will verify it
+  // to prevent concurrent update conflicts (412 Precondition Failed).
   const res = await fetch(`${BASE_URL}/api/v1/cases/${caseId}`, {
     method: "PATCH",
     headers,
     body: JSON.stringify(updates),
   });
-  if (!res.ok) throw new Error("Failed to update case");
+
+  if (res.status === 412) {
+    throw new Error("CONCURRENCY_CONFLICT");
+  }
+
+  if (res.status === 428) {
+    throw new Error("PRECONDITION_REQUIRED");
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Update failed" }));
+    throw new Error(err.detail ?? "Failed to update case");
+  }
   return res.json();
 }
 
@@ -213,6 +229,7 @@ export async function uploadDocument(
 
 /**
  * List all documents in a case, ordered by most recent.
+ * Includes forensic metadata (e.g., OCR confidence).
  */
 export async function getDocuments(
   caseId: string,
@@ -220,7 +237,15 @@ export async function getDocuments(
   const headers = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/api/v1/documents/${caseId}`, { headers });
   if (!res.ok) throw new Error("Failed to fetch documents");
-  return res.json() as Promise<DocumentsResponse>;
+  const data = await res.json();
+  
+  // Ensure metadata is parsed if it comes as a string from some legacy paths
+  const parsedDocs = data.documents.map((doc: any) => ({
+    ...doc,
+    metadata: typeof doc.metadata === 'string' ? JSON.parse(doc.metadata) : doc.metadata
+  }));
+
+  return { documents: parsedDocs, count: data.count };
 }
 
 /**
@@ -527,7 +552,7 @@ export async function streamChat(
   },
   callbacks: {
     onToken: (text: string) => void;
-    onStatus?: (agent: string, message: string) => void;
+    onStatus?: (agent: string, message: string, confidence?: number) => void;
     onDone?: (content: string, citations: Citation[]) => void;
     onError?: (error: string) => void;
   },
@@ -574,7 +599,7 @@ export async function streamChat(
           if (currentEvent === "token" && data.text) {
             callbacks.onToken(data.text);
           } else if (currentEvent === "agent_status" && callbacks.onStatus) {
-            callbacks.onStatus(data.agent ?? "", data.message ?? "");
+            callbacks.onStatus(data.agent ?? "", data.message ?? "", data.confidence);
           } else if (currentEvent === "done" && callbacks.onDone) {
             callbacks.onDone(data.content ?? "", data.citations ?? []);
           } else if (currentEvent === "error" && callbacks.onError) {

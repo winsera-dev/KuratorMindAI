@@ -44,6 +44,7 @@ export function ChatTab({ caseId, onViewSource }: ChatTabProps) {
   const [message, setMessage] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [agentStatus, setAgentStatus] = useState("");
+  const [agentConfidence, setAgentConfidence] = useState<number | undefined>(undefined);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const sessionId = useRef<string>("");
@@ -115,7 +116,12 @@ export function ChatTab({ caseId, onViewSource }: ChatTabProps) {
               return updated;
             });
           },
-          onStatus: (_, msg) => setAgentStatus(msg),
+          onStatus: (_, msg, confidence) => {
+            setAgentStatus(msg);
+            if (confidence !== undefined) {
+                setAgentConfidence(confidence);
+            }
+          },
           onDone: (content, citations) => {
             setMessages((prev) => {
               const updated = [...prev];
@@ -131,6 +137,7 @@ export function ChatTab({ caseId, onViewSource }: ChatTabProps) {
               return updated;
             });
             setAgentStatus("");
+            setAgentConfidence(undefined);
           },
           onError: (err) => {
             setMessages((prev) => {
@@ -154,6 +161,7 @@ export function ChatTab({ caseId, onViewSource }: ChatTabProps) {
     } finally {
       setStreaming(false);
       setAgentStatus("");
+      setAgentConfidence(undefined);
     }
   };
 
@@ -208,13 +216,35 @@ export function ChatTab({ caseId, onViewSource }: ChatTabProps) {
           ))
         )}
         {streaming && agentStatus && (
-          <div className="flex justify-start gap-4 animate-pulse">
-            <div className="w-9 h-9 rounded-xl bg-accent-blue/5 border border-accent-blue/20 flex items-center justify-center shrink-0">
+          <div className="flex justify-start gap-4">
+            <div className="w-9 h-9 rounded-xl bg-accent-blue/5 border border-accent-blue/20 flex items-center justify-center shrink-0 animate-pulse">
               <Bot size={18} className="text-accent-blue" />
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-secondary/50 rounded-2xl border border-border-subtle">
-              <Loader2 size={12} className="animate-spin text-accent-blue" />
-              <span className="text-xs font-bold text-text-muted uppercase tracking-widest">{agentStatus}</span>
+            <div className="flex items-center gap-3 px-4 py-2 bg-secondary/50 rounded-2xl border border-border-subtle shadow-sm">
+              <div className="flex items-center gap-2">
+                <Loader2 size={12} className="animate-spin text-accent-blue" />
+                <span className="text-xs font-bold text-text-muted uppercase tracking-widest">{agentStatus}</span>
+              </div>
+              
+              {agentConfidence !== undefined && agentConfidence > 0 && (
+                <>
+                  <div className="w-px h-3 bg-border-subtle" />
+                  <div className="flex items-center gap-1.5">
+                    <div className={`w-1.5 h-1.5 rounded-full ${
+                      agentConfidence >= 0.8 ? 'bg-accent-emerald shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 
+                      agentConfidence >= 0.5 ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 
+                      'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
+                    }`} />
+                    <span className={`text-[10px] font-black tabular-nums tracking-tight ${
+                      agentConfidence >= 0.8 ? 'text-accent-emerald' : 
+                      agentConfidence >= 0.5 ? 'text-amber-500' : 
+                      'text-rose-500'
+                    }`}>
+                      {Math.round(agentConfidence * 100)}% CONFIDENCE
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

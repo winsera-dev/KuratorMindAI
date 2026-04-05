@@ -84,14 +84,30 @@ export function SourcesTab({ caseId }: SourcesTabProps) {
 
     let successCount = 0;
     for (const file of fileArr) {
-      try {
-        const res = await uploadDocument(caseId, file);
-        setDocuments((prev) => [res.document, ...prev]);
-        successCount++;
-      } catch (err: any) {
-        const msg = err.message || "Unknown error";
-        setError(`Failed to upload "${file.name}": ${msg}`);
-        toast.error(`Upload failed: ${msg}`);
+      let retries = 0;
+      const MAX_RETRIES = 3;
+      let uploaded = false;
+
+      while (retries <= MAX_RETRIES && !uploaded) {
+        try {
+          if (retries > 0) {
+            const delay = Math.pow(2, retries) * 1000;
+            console.log(`Retrying upload for ${file.name} in ${delay}ms... (Attempt ${retries}/${MAX_RETRIES})`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+
+          const res = await uploadDocument(caseId, file);
+          setDocuments((prev) => [res.document, ...prev]);
+          successCount++;
+          uploaded = true;
+        } catch (err: any) {
+          retries++;
+          if (retries > MAX_RETRIES) {
+            const msg = err.message || "Unknown error";
+            setError(`Failed to upload "${file.name}" after ${MAX_RETRIES} retries: ${msg}`);
+            toast.error(`Upload failed permanently: ${msg}`);
+          }
+        }
       }
     }
     
@@ -250,13 +266,23 @@ function DocumentRow({
         {isExcel ? <FileSpreadsheet size={20} /> : <FileText size={20} />}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-black text-text-primary truncate uppercase tracking-tight">
-          {doc.file_name}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-black text-text-primary truncate uppercase tracking-tight">
+            {doc.file_name}
+          </p>
+          {!!doc.metadata?.low_confidence && (
+            <div className="group/warn relative">
+              <AlertCircle size={14} className="text-accent-rose animate-pulse cursor-help" />
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 p-2 bg-slate-900 border border-accent-rose/30 rounded-lg text-[10px] font-bold text-accent-rose opacity-0 group-hover/warn:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
+                FORENSIC WARNING: Low OCR Confidence. High risk of character misinterpretation. Manual verification required.
+              </div>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[10px] font-bold text-text-muted opacity-60">
-                {doc.page_count ? `${doc.page_count} PAGES` : "SERIALIZING"}
-            </span>
+          <span className="text-[10px] font-bold text-text-muted opacity-60">
+            {doc.page_count ? `${doc.page_count} PAGES` : "SERIALIZING"}
+          </span>
             <span className="w-1 h-1 rounded-full bg-border-default" />
             <span className="text-[10px] font-bold text-text-muted opacity-60 uppercase">
                 {isExcel ? "Structured Data" : "Forensic OCR"}

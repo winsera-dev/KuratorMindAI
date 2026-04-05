@@ -14,7 +14,8 @@ import {
   Activity,
   Loader2,
   Save,
-  FileText
+  FileText,
+  AlertCircle
 } from "lucide-react";
 import { createCase, updateCase, deleteCase } from "@/lib/api";
 import { Case, CaseStage } from "@/types";
@@ -25,7 +26,12 @@ import { z } from "zod";
 const caseSchema = z.object({
   name: z.string().min(3, "Workspace Name must be at least 3 characters"),
   debtor_entity: z.string().min(3, "Debtor Entity must be at least 3 characters"),
-  case_number: z.string().min(3, "Case Number is required"),
+  case_number: z.string()
+    .min(5, "Case Number is too short")
+    .regex(
+      /^\d+\/Pdt\.Sus-(PKPU|Pailit)\/\d{4}\/PN\s.*$/i, 
+      "Invalid format. Use standard: [No]/Pdt.Sus-[Type]/[Year]/PN [Court]"
+    ),
   court_name: z.string().min(3, "Court Name is required"),
   stage_started_at: z.string().min(1, "Stage Start Date is required"),
   stage: z.string(),
@@ -62,6 +68,7 @@ export default function CaseModal({
 }: CaseModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState({
     name: "",
@@ -114,6 +121,7 @@ export default function CaseModal({
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setFieldErrors({});
 
     try {
       caseSchema.parse(formData);
@@ -125,19 +133,40 @@ export default function CaseModal({
           user_id: userId,
         });
         onSuccess(res);
-        toast.success("Workspace created successfully");
+        toast.success("Workspace initialized");
       } else {
         if (!initialData?.id) throw new Error("Case ID is required for update");
-        const res = await updateCase(initialData.id, formData);
+        
+        // Pass the concurrency token (the last known updated_at)
+        const res = await updateCase(initialData.id, {
+          ...formData,
+          expected_updated_at: initialData.updated_at
+        });
+        
         onSuccess(res);
-        toast.success("Workspace updated successfully");
+        toast.success("Intelligence updated");
       }
       onClose();
     } catch (err: any) {
+      if (err.message === "CONCURRENCY_CONFLICT") {
+        setError("Forensic Conflict: This case has been updated by another user since you opened this dialogue. Please refresh the page to ensure data integrity.");
+        return;
+      }
+      if (err.message === "PRECONDITION_REQUIRED") {
+        setError("Security Error: Data versioning token is missing. Please contact support.");
+        return;
+      }
       if (err instanceof z.ZodError) {
-        const msg = err.issues[0].message;
-        setError(msg);
-        toast.error(msg);
+        const errors: Record<string, string> = {};
+        err.issues.forEach((issue) => {
+          if (issue.path[0]) {
+            errors[issue.path[0].toString()] = issue.message;
+          }
+        });
+        setFieldErrors(errors);
+        setError("Validation failed. Please correct the highlighted fields.");
+        toast.error("Forensic check failed: Invalid metadata");
+        setLoading(false);
         return;
       }
       setError(err.message || `Failed to ${mode} case`);
@@ -233,9 +262,14 @@ export default function CaseModal({
                 className="flex-1 overflow-y-auto px-8 py-7 space-y-6 custom-scrollbar"
               >
                 {error && (
-                  <div className="p-4 bg-accent-rose/10 border border-accent-rose/20 text-accent-rose text-xs font-bold rounded-xl flex items-center gap-2">
-                    <X size={14} className="shrink-0" />
-                    {error}
+                  <div className="p-4 bg-accent-rose/10 border border-accent-rose/20 text-accent-rose text-xs font-bold rounded-xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300">
+                    <AlertCircle size={18} className="shrink-0 animate-pulse" />
+                    <div className="space-y-0.5">
+                      <p>{error}</p>
+                      {error.includes("conflict") || error.includes("412") ? (
+                        <p className="text-[10px] opacity-70">A newer version of this case exists. Refreshing is required to prevent data loss.</p>
+                      ) : null}
+                    </div>
                   </div>
                 )}
 
@@ -261,14 +295,23 @@ export default function CaseModal({
                     <input
                       required
                       placeholder="e.g. PT Maju Jaya Rescheduling"
-                      className="w-full bg-primary border border-border-default rounded-xl px-4 py-3 text-sm font-bold text-text-primary focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/40 outline-none transition-all placeholder:text-text-muted/40"
+                      className={cn(
+                        "w-full bg-primary border rounded-xl px-4 py-3 text-sm font-bold text-text-primary focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/40 outline-none transition-all placeholder:text-text-muted/40",
+                        fieldErrors.name ? "border-accent-rose bg-accent-rose/5" : "border-border-default"
+                      )}
                       value={formData.name}
                       onChange={(e) => setFormData({...formData, name: e.target.value})}
                     />
+                    {fieldErrors.name && (
+                      <p className="text-[10px] font-bold text-accent-rose ml-1 uppercase">{fieldErrors.name}</p>
+                    )}
                   </div>
 
                   {/* Debtor Entity */}
-                  <div className="p-4 bg-secondary/50 rounded-2xl border border-border-default space-y-2">
+                  <div className={cn(
+                    "p-4 rounded-2xl border transition-all space-y-2",
+                    fieldErrors.debtor_entity ? "border-accent-rose bg-accent-rose/5" : "border-border-default bg-secondary/50"
+                  )}>
                     <label className="text-[10px] font-black text-text-muted uppercase tracking-widest flex items-center gap-2">
                       <Building2 className="w-3.5 h-3.5" /> Debtor Entity
                     </label>
@@ -279,19 +322,28 @@ export default function CaseModal({
                       value={formData.debtor_entity}
                       onChange={(e) => setFormData({...formData, debtor_entity: e.target.value})}
                     />
+                    {fieldErrors.debtor_entity && (
+                      <p className="text-[9px] font-bold text-accent-rose leading-tight">{fieldErrors.debtor_entity}</p>
+                    )}
                   </div>
 
                   {/* Case Number */}
-                  <div className="p-4 bg-secondary/50 rounded-2xl border border-border-default space-y-2">
+                  <div className={cn(
+                    "p-4 rounded-2xl border transition-all space-y-2",
+                    fieldErrors.case_number ? "border-accent-rose bg-accent-rose/5" : "border-border-default bg-secondary/50"
+                  )}>
                     <label className="text-[10px] font-black text-text-muted uppercase tracking-widest flex items-center gap-2">
                       <Hash className="w-3.5 h-3.5" /> Case Number
                     </label>
                     <input
-                      placeholder="e.g. 15/Pdt.Sus-PKPU/2024"
+                      placeholder="e.g. 15/Pdt.Sus-PKPU/2024/PN Jkt.Pst"
                       className="w-full bg-transparent border-none p-0 text-sm font-mono font-bold text-text-primary focus:ring-0 outline-none placeholder:text-text-muted/40"
                       value={formData.case_number}
                       onChange={(e) => setFormData({...formData, case_number: e.target.value})}
                     />
+                    {fieldErrors.case_number && (
+                      <p className="text-[9px] font-bold text-accent-rose leading-tight">{fieldErrors.case_number}</p>
+                    )}
                   </div>
 
                   {/* Case Stage */}
@@ -343,7 +395,10 @@ export default function CaseModal({
                   </div>
 
                   {/* Court Name */}
-                  <div className="p-4 bg-secondary/50 rounded-2xl border border-border-default space-y-2">
+                  <div className={cn(
+                    "p-4 rounded-2xl border transition-all space-y-2",
+                    fieldErrors.court_name ? "border-accent-rose bg-accent-rose/5" : "border-border-default bg-secondary/50"
+                  )}>
                     <label className="text-[10px] font-black text-text-muted uppercase tracking-widest flex items-center gap-2">
                       <Scale className="w-3.5 h-3.5" /> Commercial Court
                     </label>
@@ -353,6 +408,9 @@ export default function CaseModal({
                       value={formData.court_name}
                       onChange={(e) => setFormData({...formData, court_name: e.target.value})}
                     />
+                    {fieldErrors.court_name && (
+                      <p className="text-[9px] font-bold text-accent-rose leading-tight">{fieldErrors.court_name}</p>
+                    )}
                   </div>
 
                   {/* Empty spacer — keeps Court half-width, right column empty */}

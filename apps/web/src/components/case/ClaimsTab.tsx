@@ -186,6 +186,21 @@ export function ClaimsTab({ caseId, isScanningOverride, onViewEvidence }: Claims
         </div>
       </section>
 
+      {/* 1.1 Forensic Warning Banner — Financial Sanity Check */}
+      {claims.some(c => (c.claim_amount || 0) <= 0) && (
+        <div className="bg-accent-rose/5 border border-accent-rose/20 rounded-2xl p-4 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-accent-rose/10 rounded-xl text-accent-rose">
+              <ShieldAlert size={18} />
+            </div>
+            <div>
+              <p className="text-xs font-black text-text-primary uppercase tracking-tight">Forensic Quality Alert: Invalid Financials Detected</p>
+              <p className="text-[11px] text-text-muted font-medium">Multiple claims identified with Rp 0 or negative values. Immediate manual verification required.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 2. Workspace Controls */}
       {isScanning && (
         <div className="bg-accent-blue/5 border border-accent-blue/20 rounded-2xl p-6 flex items-center justify-between animate-in fade-in slide-in-from-top-4 duration-500">

@@ -77,7 +77,7 @@ def generate_and_save_report(
         # 1. Generate local PDF
         report_id = str(uuid.uuid4())
         tmp_path = f"/tmp/{report_id}.pdf"
-        generate_forensic_pdf(title, markdown_content, tmp_path)
+        generate_forensic_pdf(title, markdown_content, tmp_path, case_id=case_id)
         
         # 2. Upload to Supabase Storage
         logging.info(f"Uploading report {report_id} to storage...")

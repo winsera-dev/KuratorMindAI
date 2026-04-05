@@ -76,15 +76,18 @@ async def list_cases(
     current_user: Annotated[str, Depends(get_current_user)],
 ):
     """List all cases for the authenticated user."""
-    sb = _get_supabase()
+    auth_enabled = os.environ.get("AUTH_ENABLED", "false").lower() == "true"
+    
     try:
-        result = (
-            sb.table("cases")
-            .select("*")
-            .eq("user_id", current_user)
-            .order("updated_at", desc=True)
-            .execute()
-        )
+        query = sb.table("cases").select("*")
+        
+        if not auth_enabled:
+            # In dev mode, show cases owned by dev_user OR orphaned cases (NULL user_id)
+            query = query.or_(f"user_id.eq.{current_user},user_id.is.null")
+        else:
+            query = query.eq("user_id", current_user)
+            
+        result = query.order("updated_at", desc=True).execute()
         return {"cases": result.data, "count": len(result.data)}
     except Exception as exc:
         logger.error("List cases failed: %s", exc, exc_info=True)
@@ -188,6 +191,28 @@ async def update_case(
             if isinstance(val, str) and len(val) == 10:
                 updates[key] = f"{val} 00:00:00"
 
+    # Gap 14: Optimistic Locking (Strict Forensic Concurrency)
+    if "expected_updated_at" not in updates:
+        logger.warning(f"Metadata update without token for case {case_id}")
+        raise HTTPException(
+            status_code=428, # Precondition Required
+            detail="Forensic Token Missing: A version token (expected_updated_at) is required to ensure data integrity."
+        )
+
+    expected = updates.pop("expected_updated_at")
+    
+    # Fetch current record to verify timestamp
+    current = sb.table("cases").select("updated_at").eq("id", case_id).maybe_single().execute()
+    if current.data:
+        actual = current.data.get("updated_at")
+        # Simple string comparison for ISO timestamps (standardized by Supabase)
+        if actual and expected and actual != expected:
+            logger.warning(f"Concurrency conflict for case {case_id}: Actual {actual} != Expected {expected}")
+            raise HTTPException(
+                status_code=412, 
+                detail="Forensic Conflict: This case has been modified by another Kurator. Please refresh your workspace to avoid data overlapping."
+            )
+
     try:
         logger.info(f"Updating case {case_id} with: {updates}")
         result = sb.table("cases").update(updates).eq("id", case_id).execute()
@@ -197,6 +222,8 @@ async def update_case(
             raise HTTPException(status_code=404, detail="Case not found")
             
         return result.data[0]
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Update case failed: %s", exc, exc_info=True)
         # Check for specific DB errors in the exception string
@@ -230,15 +257,19 @@ async def get_case(
     current_user: Annotated[str, Depends(get_current_user)],
 ):
     """Fetch a single forensic case — only if it belongs to the authenticated user."""
-    sb = _get_supabase()
+    auth_enabled = os.environ.get("AUTH_ENABLED", "false").lower() == "true"
+    
     try:
-        result = (
-            sb.table("cases")
-            .select("*")
-            .eq("id", case_id)
-            .eq("user_id", current_user)  # ownership check
-            .execute()
-        )
+        query = sb.table("cases").select("*").eq("id", case_id)
+        
+        if not auth_enabled:
+            # In dev mode, allow access if owned by dev_user OR orphaned
+            query = query.or_(f"user_id.eq.{current_user},user_id.is.null")
+        else:
+            query = query.eq("user_id", current_user)
+            
+        result = query.execute()
+        
         if not result.data or len(result.data) == 0:
             raise HTTPException(status_code=404, detail="Case not found")
         return result.data[0]

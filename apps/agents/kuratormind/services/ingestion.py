@@ -81,22 +81,49 @@ def _extract_pdf(file_bytes: bytes) -> list[dict]:
             img_bytes = pix.tobytes("png")
             
             try:
+                # Prompt optimized for Indonesian legal context + quality scoring
                 response = client.models.generate_content(
                     model="gemini-2.0-flash",
                     contents=[
                         "Extract all text from this Indonesian legal document page. "
                         "Preserve table structures using markdown format if present. "
-                        "Focus on names, dates, and currency amounts (IDR/USD).",
+                        "Focus on names, dates, and currency amounts (IDR/USD). "
+                        "Crucially, provide a 'quality_score' from 0.0 to 1.0 (1.0 = crystal clear, 0.0 = unreadable) "
+                        "based on handwriting legibility or scan blurriness.",
                         genai.types.Part.from_bytes(data=img_bytes, mime_type="image/png")
                     ]
                 )
                 text = response.text or ""
-                logger.info(f"Vision OCR successful for page {page_num}")
+                
+                # Heuristic parsing of quality score if LLM provides it, else default 0.8
+                # In a real scenario, we'd use response.candidates[0].content for structured output
+                quality_guess = 0.8
+                if "quality_score" in text.lower():
+                    # Quick extraction of numeric score (rough fallback)
+                    try:
+                        import re
+                        scores = re.findall(r"0\.\d+", text)
+                        if scores:
+                            quality_guess = float(scores[0])
+                    except:
+                        pass
+                
+                logger.info(f"Vision OCR successful for page {page_num} (Quality: {quality_guess})")
+                
+                # Tag page with metadata for low confidence
+                page_meta = {"low_confidence": quality_guess < 0.7, "ocr_quality": quality_guess}
             except Exception as e:
                 logger.error(f"Vision OCR failed for page {page_num}: {e}")
+                page_meta = {"low_confidence": True, "error": str(e)}
+        else:
+            page_meta = {"low_confidence": False, "ocr_quality": 1.0}
         
         if text:
-            pages.append({"page_number": page_num, "text": text})
+            pages.append({
+                "page_number": page_num, 
+                "text": text,
+                "metadata": page_meta
+            })
             
     doc.close()
     return pages
@@ -305,8 +332,12 @@ def ingest_document(
         page_count = max(p["page_number"] for p in pages)
 
         # 7. Insert chunks into DB
-        rows = [
-            {
+        rows = []
+        for chunk in chunks:
+            # Find matching page metadata
+            page_meta = next((p["metadata"] for p in pages if p["page_number"] == chunk["page_number"]), {})
+            
+            rows.append({
                 "id": str(uuid.uuid4()),
                 "document_id": document_id,
                 "case_id": case_id,
@@ -315,10 +346,8 @@ def ingest_document(
                 "page_number": chunk["page_number"],
                 "section_title": chunk["section_title"],
                 "embedding": chunk["embedding"],
-                "metadata": {},
-            }
-            for chunk in chunks
-        ]
+                "metadata": page_meta, # Attach OCR confidence to chunk metadata
+            })
 
         # Upsert in batches to stay under Supabase payload limits
         BATCH = 50
@@ -331,11 +360,15 @@ def ingest_document(
         summary = _generate_summary(full_text, file_name)
 
         # 9. Update status to processing for Audit phase
+        # Gap 15: Flag document globally if any page is low confidence
+        document_is_low_quality = any(p.get("metadata", {}).get("low_confidence") for p in pages)
+        
         sb.table("case_documents").update(
             {
                 "status": "processing",
                 "summary": "Analysing document for forensic claims and audit flags...",
                 "page_count": page_count,
+                "metadata": {"low_confidence": document_is_low_quality}
             }
         ).eq("id", document_id).execute()
 

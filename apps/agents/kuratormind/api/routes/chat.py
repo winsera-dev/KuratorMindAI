@@ -519,14 +519,31 @@ async def chat(
                             friendly_msg = f"Finalizing {tool_args.get('title', 'report')} and rendering PDF…"
                         elif tool_name == "semantic_search":
                             friendly_msg = "Scanning document vault for relevant deep-links…"
+                        elif tool_name == "search_case_documents":
+                            friendly_msg = "Indexing case repository for document matches…"
+                        elif tool_name == "get_document_summary":
+                            friendly_msg = "Extracting forensic digest and document sentiment…"
+                        elif tool_name == "get_creditor_claim_details":
+                            friendly_msg = "Auditing creditor claims and Proof of Debt (POD)…"
+                        elif tool_name == "resolve_global_entity":
+                            friendly_msg = "Verifying entity identity against the Global Forensic Vault…"
+                        elif tool_name == "search_regulations":
+                            friendly_msg = "Cross-referencing OJK/UU/PSAK legal frameworks…"
+                        elif tool_name == "analyze_financial_data":
+                            friendly_msg = "Calculating solvency ratios and accounting anomalies…"
+                        elif tool_name == "log_accounting_red_flag":
+                            friendly_msg = "Flagging forensic audit exception…"
+                        elif tool_name == "analyze_financial_integrity":
+                            friendly_msg = "Performing high-level integrity scan on financial statements…"
 
                         yield {
                             "event": "agent_status",
                             "data": json.dumps({
-                                "agent": agent_name, # Use resolved agent_name
+                                "agent": agent_name,
                                 "status": "executing_tool",
                                 "message": friendly_msg,
-                                "details": tool_args if tool_name != "generate_and_save_report" else {} # Hide raw report content
+                                "confidence": 0.0,
+                                "details": tool_args if tool_name != "generate_and_save_report" else {}
                             }),
                         }
                         
@@ -540,9 +557,39 @@ async def chat(
                                 result = TOOLS_MAP[tool_name](**tool_args)
                             else:
                                 result = {"error": f"Tool {tool_name} not found."}
+                            
+                            # Calculate confidence from metrics
+                            confidence = 0.95 # Default base confidence for successful tool execution
+                            if isinstance(result, dict):
+                                if "average_similarity" in result:
+                                    confidence = result["average_similarity"]
+                                elif result.get("error"):
+                                    confidence = 0.0
+                                elif "count" in result and result["count"] == 0:
+                                    confidence = 0.1 # No results found
+                            
+                            # Emit completion status with confidence
+                            yield {
+                                "event": "agent_status",
+                                "data": json.dumps({
+                                    "agent": agent_name,
+                                    "status": "tool_complete",
+                                    "message": friendly_msg.replace("Executing", "Finished").replace("Scanning", "Scanned").replace("Searching", "Searched"),
+                                    "confidence": confidence
+                                }),
+                            }
                         except Exception as e:
                             logger.error(f"Tool execution error ({tool_name}): {e}")
                             result = {"error": str(e)}
+                            yield {
+                                "event": "agent_status",
+                                "data": json.dumps({
+                                    "agent": agent_name,
+                                    "status": "error",
+                                    "message": f"Issue encountered: {friendly_msg}",
+                                    "confidence": 0.0
+                                }),
+                            }
                         
                         tool_results_parts.append({
                             "function_response": {

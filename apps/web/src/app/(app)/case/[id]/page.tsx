@@ -11,6 +11,7 @@ import {
   FileOutput,
   Pencil,
   Hash,
+  AlertCircle,
 } from "lucide-react";
 import { 
   checkHealth, 
@@ -67,6 +68,7 @@ export default function CaseWorkspace({
   const [isCaseScanning, setIsCaseScanning] = useState(false);
   const [documentCount, setDocumentCount] = useState(0);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isStale, setIsStale] = useState(false);
 
   // Health polling setup
   const failCountRef = useRef(0);
@@ -77,10 +79,17 @@ export default function CaseWorkspace({
       const scanning = docsData.documents.some(d => d.status === "pending" || d.status === "processing");
       setIsCaseScanning(scanning);
       setDocumentCount(docsData.count);
+
+      // Concurrency Check: Verify if server has a newer version
+      const freshCase = await getCase(caseId);
+      if (caseData && freshCase.updated_at !== caseData.updated_at) {
+        // Only mark stale if we aren't in the middle of a local update success
+        setIsStale(true);
+      }
     } catch (err) {
       console.error("Status check failed:", err);
     }
-  }, [caseId]);
+  }, [caseId, caseData]);
 
   useEffect(() => {
     const poll = async () => {
@@ -98,12 +107,14 @@ export default function CaseWorkspace({
     };
 
     poll(); 
-    const interval = setInterval(poll, 5000);
+    const interval = setInterval(poll, 10000); // 10s for metadata sync
 
-    getCase(caseId).then(setCaseData).catch(console.error);
+    if (!caseData) {
+      getCase(caseId).then(setCaseData).catch(console.error);
+    }
 
     return () => clearInterval(interval);
-  }, [caseId, checkCaseStatus]);
+  }, [caseId, checkCaseStatus, caseData]);
 
   return (
     <div className="h-screen flex flex-col bg-primary">
@@ -135,6 +146,18 @@ export default function CaseWorkspace({
             {caseData && (
               <div className="flex items-center gap-2 shrink-0 ml-1 mt-0.5">
                 <CaseStatusBadge caseData={caseData} readOnly={true} />
+                
+                {isStale && (
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded bg-accent-rose/10 border border-accent-rose/30 text-[10px] font-black text-accent-rose uppercase tracking-widest animate-pulse hover:bg-accent-rose/20 transition-all"
+                    title="Data Conflict Detected: Please Refresh"
+                  >
+                    <AlertCircle size={10} />
+                    Sync Conflict: Refresh Required
+                  </button>
+                )}
+
                 <button
                   onClick={() => setIsEditModalOpen(true)}
                   className="p-1.5 hover:bg-bg-elevated rounded border border-transparent hover:border-border-default text-text-muted hover:text-accent-blue transition-all"

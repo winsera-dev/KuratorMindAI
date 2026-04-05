@@ -34,9 +34,10 @@ export default function DashboardPage() {
     try {
       // Get current user session
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
       
-      setUserId(session.user.id);
+      // Fallback to dev user if no session (only works if backend AUTH_ENABLED=false)
+      const currentUserId = session?.user?.id || "00000000-0000-0000-0000-000000000000";
+      setUserId(currentUserId);
       
       const data = await getCases();
       setCases(data || []);

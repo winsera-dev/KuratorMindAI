@@ -187,7 +187,7 @@ function PaginatedTableSection({ list, formatCurrency, onViewEvidence }: any) {
                   <span>{formatCurrency(claim.claim_amount)}</span>
                   {(claim.claim_amount || 0) <= 0 && (
                     <span className="text-[10px] font-bold uppercase tracking-widest text-accent-rose/80 flex items-center gap-1">
-                      <AlertCircle size={10} /> Invalid Amount
+                      <ShieldAlert size={10} /> Invalid Amount
                     </span>
                   )}
                 </div>
