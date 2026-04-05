@@ -67,6 +67,12 @@ def _extract_pdf(file_bytes: bytes) -> list[dict]:
     pages: list[dict] = []
     doc = fitz.open(stream=file_bytes, filetype="pdf")
     
+    # TC-DOC-07: Guard against password protected files
+    if doc.is_encrypted:
+        doc.close()
+        logger.error("Attempted to ingest encrypted PDF.")
+        raise ValueError("Document is password protected. Please remove protection before uploading.")
+
     client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
     
     for page_num, page in enumerate(doc, start=1):

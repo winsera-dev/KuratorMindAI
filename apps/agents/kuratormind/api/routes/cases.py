@@ -8,6 +8,7 @@ All routes are protected by Supabase JWT authentication.
 import logging
 import os
 import uuid
+import re
 from datetime import date
 from typing import List, Optional, Any, Annotated
 
@@ -21,10 +22,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ------------------------------------------------------------
-# Models
+# Helpers
 # ------------------------------------------------------------
 
-class CaseBase(BaseModel):
+def _validate_case_number(case_number: str):
+    """
+    Standard Indonesian Commercial Court format: [No]/Pdt.Sus-[Type]/[Year]/PN [Court]
+    Example: 15/Pdt.Sus-PKPU/2024/PN Niaga Jkt.Pst
+    """
+    if not case_number:
+        return
+
+    pattern = r"^[0-9]+/Pdt\.Sus-(PKPU|Pailit)/[0-9]{4}/PN .+$"
+    if not re.match(pattern, case_number):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid case number format: '{case_number}'. "
+                "Must follow court standards, e.g., '15/Pdt.Sus-PKPU/2024/PN Niaga Jkt.Pst'."
+            )
+        )
+
+def _get_supabase() -> Client:
     name: str
     description: Optional[str] = None
     debtor_entity: Optional[str] = None
@@ -111,6 +130,10 @@ async def create_case(
     # Always override user_id with the authenticated user — never trust client-supplied value
     case_data["user_id"] = current_user
 
+    # TC-CASE-12: Enforce Regex for court case number
+    if case_data.get("case_number"):
+        _validate_case_number(case_data["case_number"])
+
     # 2. Encrypt PII
     if case_data.get("debtor_entity"):
         case_data["debtor_entity"] = encrypt_pii(case_data["debtor_entity"])
@@ -191,6 +214,10 @@ async def update_case(
     
     from datetime import datetime
     
+    # TC-CASE-12: Enforce Regex for court case number if provided
+    if updates.get("case_number"):
+        _validate_case_number(updates["case_number"])
+
     # 1. Encrypt PII if provided
     if "debtor_entity" in updates:
         updates["debtor_entity"] = encrypt_pii(updates["debtor_entity"])
