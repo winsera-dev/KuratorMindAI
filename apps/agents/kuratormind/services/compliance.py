@@ -39,14 +39,29 @@ def check_bankruptcy_eligibility(claims: List[Dict[str, Any]]) -> Dict[str, Any]
             
     meets_article_8 = len(matured_claims) >= 1
     
+    # 3. Simple Proof (Pembuktian Sederhana)
+    # UU 37/2004 requires facts to be 'simply proven'. 
+    # We verify that matured claims have documentation references.
+    SIMPLE_PROOF_TYPES = ["Contract", "Invoice", "Agreement", "Akta", "Kuitansi", "Faktur", "SPK", "PO"]
+    matured_with_proof = []
+    for c in matured_claims:
+        meta = c.get("metadata", {}) or {}
+        doc_type = str(meta.get("document_type", ""))
+        if any(pt.lower() in doc_type.lower() for pt in SIMPLE_PROOF_TYPES):
+            matured_with_proof.append(c)
+            
+    meets_simple_proof = len(matured_with_proof) >= 1
+    
     # Overall Eligibility
-    eligible = meets_article_2 and meets_article_8
+    eligible = meets_article_2 and meets_article_8 and meets_simple_proof
     
     reasons = []
     if not meets_article_2:
         reasons.append(f"Kurang dari 2 kreditur (Hanya ditemukan {creditor_count}).")
     if not meets_article_8:
         reasons.append("Tidak ditemukan utang yang telah jatuh waktu dan dapat ditagih.")
+    if meets_article_8 and not meets_simple_proof:
+        reasons.append("Utang yang jatuh tempo tidak memiliki bukti dokumen pendukung yang kuat (Pembuktian Sederhana).")
         
     return {
         "eligible": eligible,
@@ -59,6 +74,10 @@ def check_bankruptcy_eligibility(claims: List[Dict[str, Any]]) -> Dict[str, Any]
             "status": meets_article_8,
             "matured_claims_count": len(matured_claims),
             "matured_claims": [c.get("creditor_name") for c in matured_claims]
+        },
+        "simple_proof": {
+            "status": meets_simple_proof,
+            "proven_claims_count": len(matured_with_proof)
         },
         "reasons": reasons
     }
