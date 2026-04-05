@@ -41,8 +41,8 @@ def check_bankruptcy_eligibility(claims: List[Dict[str, Any]]) -> Dict[str, Any]
     
     # 3. Simple Proof (Pembuktian Sederhana)
     # UU 37/2004 requires facts to be 'simply proven'. 
-    # We verify that matured claims have documentation references.
-    SIMPLE_PROOF_TYPES = ["Contract", "Invoice", "Agreement", "Akta", "Kuitansi", "Faktur", "SPK", "PO"]
+    # We verify that ALL matured claims (critical claims) have documentation references.
+    SIMPLE_PROOF_TYPES = ["Contract", "Invoice", "Agreement", "Akta", "Kuitansi", "Faktur", "SPK", "PO", "Legal Document"]
     matured_with_proof = []
     for c in matured_claims:
         meta = c.get("metadata", {}) or {}
@@ -50,7 +50,8 @@ def check_bankruptcy_eligibility(claims: List[Dict[str, Any]]) -> Dict[str, Any]
         if any(pt.lower() in doc_type.lower() for pt in SIMPLE_PROOF_TYPES):
             matured_with_proof.append(c)
             
-    meets_simple_proof = len(matured_with_proof) >= 1
+    # Stricter interpretation for "Stability": All matured claims must have proof
+    meets_simple_proof = len(matured_with_proof) == len(matured_claims) if matured_claims else False
     
     # Overall Eligibility
     eligible = meets_article_2 and meets_article_8 and meets_simple_proof
@@ -60,8 +61,14 @@ def check_bankruptcy_eligibility(claims: List[Dict[str, Any]]) -> Dict[str, Any]
         reasons.append(f"Kurang dari 2 kreditur (Hanya ditemukan {creditor_count}).")
     if not meets_article_8:
         reasons.append("Tidak ditemukan utang yang telah jatuh waktu dan dapat ditagih.")
-    if meets_article_8 and not meets_simple_proof:
-        reasons.append("Utang yang jatuh tempo tidak memiliki bukti dokumen pendukung yang kuat (Pembuktian Sederhana).")
+    
+    # Check if we have matured claims but some lack proof
+    if matured_claims and not meets_simple_proof:
+        unproven_count = len(matured_claims) - len(matured_with_proof)
+        reasons.append(
+            f"Ditemukan {unproven_count} utang jatuh tempo tanpa bukti dokumen pendukung yang kuat "
+            "(Pembuktian Sederhana). Semua bukti utang harus dapat dibuktikan secara sumir."
+        )
         
     return {
         "eligible": eligible,

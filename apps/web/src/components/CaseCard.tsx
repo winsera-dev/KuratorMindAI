@@ -61,39 +61,43 @@ export default function CaseCard({ caseData, onEdit }: CaseCardProps) {
   return (
     <Link
       href={`/case/${caseData.id}`}
-      className="group block bg-bg-card border border-border-default rounded-2xl p-6 hover:border-accent-blue/50 transition-all hover:shadow-xl hover:shadow-accent-blue/5 relative overflow-hidden h-full"
+      className="group block bg-bg-card border border-border-default rounded-2xl p-6 hover:border-accent-blue/30 transition-all hover:shadow-2xl hover:shadow-accent-blue/5 relative overflow-hidden h-full cursor-pointer"
     >
+      {/* Background Watermark - Forensic/Legal Texture */}
+      <div className="absolute -bottom-6 -right-6 text-slate-500/5 group-hover:text-accent-blue/10 transition-all pointer-events-none -rotate-12">
+        <Scale size={140} strokeWidth={0.5} />
+      </div>
+
       {/* Top Row: Case Metadata */}
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-4 relative z-10">
         <div className="space-y-1 min-w-0">
-          <span className="text-[10px] font-black uppercase tracking-widest text-text-muted opacity-60">
-            Case #{caseData.case_number || "PENDING"}
-          </span>
+          <div className="flex items-center gap-2">
+            <Scale className="w-3.5 h-3.5 text-accent-blue/40" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-text-muted opacity-50">
+              Case #{caseData.case_number || "PENDING"}
+            </span>
+          </div>
           <h3 className="text-lg font-black group-hover:text-accent-blue transition-colors truncate">
             {caseData.name}
           </h3>
-          <p className="text-[11px] text-text-secondary font-bold uppercase tracking-tight truncate opacity-80">
+          <p className="text-[11px] text-text-secondary font-bold uppercase tracking-tight truncate opacity-60">
             {caseData.debtor_entity || "Undisclosed Entity"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {onEdit && (
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onEdit(caseData);
-              }}
-              className="w-10 h-10 rounded-xl bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-muted hover:text-accent-blue hover:bg-accent-blue/10 hover:border-accent-blue/30 transition-all shrink-0 relative z-10"
-              title="Edit Workspace"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
-          )}
-          <div className="w-10 h-10 rounded-xl bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-muted group-hover:text-accent-blue group-hover:bg-accent-blue/5 transition-all shrink-0">
-            <Scale className="w-5 h-5" />
-          </div>
-        </div>
+        
+        {onEdit && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onEdit(caseData);
+            }}
+            className="w-8 h-8 rounded-full bg-bg-elevated/40 backdrop-blur-md border border-border-subtle flex items-center justify-center text-text-muted hover:text-white hover:bg-accent-blue hover:border-accent-blue/50 transition-all shrink-0 relative z-20 shadow-sm cursor-pointer"
+            title="Edit Workspace"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Description */}

@@ -294,30 +294,14 @@ export default function CaseModal({
                     />
                   </div>
 
-                  {/* Court Name */}
-                  <div className="p-4 bg-secondary/50 rounded-2xl border border-border-default space-y-2">
-                    <label className="text-[10px] font-black text-text-muted uppercase tracking-widest flex items-center gap-2">
-                      <Scale className="w-3.5 h-3.5" /> Commercial Court
-                    </label>
-                    <input
-                      placeholder="e.g. PN Jakarta Pusat"
-                      className="w-full bg-transparent border-none p-0 text-sm font-bold text-text-primary focus:ring-0 outline-none placeholder:text-text-muted/40"
-                      value={formData.court_name}
-                      onChange={(e) => setFormData({...formData, court_name: e.target.value})}
-                    />
-                  </div>
-
-                  {/* Empty spacer — keeps Court half-width, right column empty */}
-                  <div />
-
                   {/* Case Stage */}
-                  <div className="space-y-2">
+                  <div className="space-y-2 p-4 bg-primary/50 border border-border-default rounded-2xl">
                     <label className="text-[10px] font-black text-text-muted uppercase tracking-widest flex items-center gap-2 ml-1">
-                      <Activity className="w-3.5 h-3.5" /> Current Lifecycle Stage
+                      <Activity className="w-3.5 h-3.5 text-accent-blue" /> Case Stage
                     </label>
                     <div className="relative group">
                       <select
-                        className="w-full bg-primary border border-border-default rounded-xl px-4 py-3 text-sm font-bold text-text-primary focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/40 outline-none transition-all appearance-none cursor-pointer"
+                        className="w-full bg-transparent border-none p-0 text-sm font-bold text-text-primary focus:ring-0 outline-none appearance-none cursor-pointer"
                         value={formData.stage}
                         onChange={(e) => {
                           const newStage = e.target.value as CaseStage;
@@ -339,8 +323,8 @@ export default function CaseModal({
                           <option key={id} value={id}>{label}</option>
                         ))}
                       </select>
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
-                        <Plus size={14} className="rotate-45" />
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted opacity-40">
+                        <Plus size={12} className="rotate-45" />
                       </div>
                     </div>
                   </div>
@@ -348,7 +332,7 @@ export default function CaseModal({
                   {/* Stage Start Date */}
                   <div className="p-4 bg-secondary/50 rounded-2xl border border-border-default space-y-2">
                     <label className="text-[10px] font-black text-text-muted uppercase tracking-widest flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5" /> Decision / Start Date
+                      <Calendar className="w-3.5 h-3.5 text-accent-blue" /> Start Date
                     </label>
                     <input
                       type="date"
@@ -357,6 +341,22 @@ export default function CaseModal({
                       onChange={(e) => setFormData({...formData, stage_started_at: e.target.value})}
                     />
                   </div>
+
+                  {/* Court Name */}
+                  <div className="p-4 bg-secondary/50 rounded-2xl border border-border-default space-y-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-widest flex items-center gap-2">
+                      <Scale className="w-3.5 h-3.5" /> Commercial Court
+                    </label>
+                    <input
+                      placeholder="e.g. PN Jakarta Pusat"
+                      className="w-full bg-transparent border-none p-0 text-sm font-bold text-text-primary focus:ring-0 outline-none placeholder:text-text-muted/40"
+                      value={formData.court_name}
+                      onChange={(e) => setFormData({...formData, court_name: e.target.value})}
+                    />
+                  </div>
+
+                  {/* Empty spacer — keeps Court half-width, right column empty */}
+                  <div className="hidden md:block" />
                 </div>
 
                 {/* Audit Notes */}
