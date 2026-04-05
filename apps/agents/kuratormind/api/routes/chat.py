@@ -464,33 +464,35 @@ async def chat(
             while current_turn < max_turns:
                 current_turn += 1
                 
-                # We use generate_content for tool calls, and generate_content_stream for the final text response
-                # But to keep it simple and robust, we check for function calls first.
-                try:
-                    async with asyncio.timeout(60):
-                        response = await client.aio.models.generate_content(
-                            model="models/gemini-2.5-flash",
-                            contents=contents,
-                            config={
-                                "system_instruction": system_prompt,
-                                "temperature": 0.2,
-                                "tools": gemini_tools
-                            },
-                        )
-                except asyncio.TimeoutError:
-                    logger.error("Gemini API call timed out after 60 seconds")
-                    yield {
-                        "event": "error",
-                        "data": json.dumps({"error": "Agent reasoning timed out. Please try again."}),
-                    }
-                    break
-                except Exception as e:
-                    logger.error(f"Gemini API call failed: {e}")
-                    yield {
-                        "event": "error",
-                        "data": json.dumps({"error": f"Agent failed: {e}"}),
-                    }
-                    break
+                # TC-RPT-08: Heartbeat implementation for connection stability
+                # Use a task and shield to pulse heartbeats while the deep chain runs.
+                api_task = asyncio.create_task(
+                    client.aio.models.generate_content(
+                        model="models/gemini-2.0-flash",
+                        contents=contents,
+                        config={
+                            "system_instruction": system_prompt,
+                            "temperature": 0.2,
+                            "tools": gemini_tools
+                        },
+                    )
+                )
+                
+                response = None
+                while response is None:
+                    try:
+                        # Wait 15s for the task result. If timeout, yield heartbeat and retry wait.
+                        response = await asyncio.wait_for(asyncio.shield(api_task), timeout=15)
+                    except asyncio.TimeoutError:
+                        yield {"comment": "heartbeat"}
+                        continue 
+                    except Exception as e:
+                        logger.error(f"Gemini API call failed: {e}")
+                        yield {
+                            "event": "error",
+                            "data": json.dumps({"error": f"Agent failed: {e}"}),
+                        }
+                        return 
                 
                 candidate = response.candidates[0]
                 if not candidate.content or not candidate.content.parts:
