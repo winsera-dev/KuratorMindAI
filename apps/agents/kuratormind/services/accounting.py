@@ -8,8 +8,67 @@ checks for accounting integrity (Double-Entry Balance).
 
 from typing import Dict, Any, List, Optional
 import logging
+import math
+from collections import Counter
 
 logger = logging.getLogger(__name__)
+
+def perform_benford_analysis(amounts: List[float]) -> Dict[str, Any]:
+    """
+    Apply Benford's Law (First Digit) to detect potential financial manipulation.
+    Returns statistical deviation flags.
+    """
+    # 1. Filter non-zero, positive numbers
+    valid_amounts = [abs(a) for a in amounts if a != 0]
+    
+    if len(valid_amounts) < 30: # Minimum sample size for statistical relevance
+        return {
+            "is_flagged": False,
+            "message": "Data tidak cukup untuk analisis Benford (min. 30 sampel).",
+            "sample_size": len(valid_amounts)
+        }
+        
+    # 2. Extract first significant digits
+    digits = []
+    for a in valid_amounts:
+        # Convert to string, remove decimal/zeros to find leading digit
+        s = str(a).replace('.', '').replace('0', '').lstrip('0')
+        if s:
+            digits.append(int(s[0]))
+            
+    total = len(digits)
+    if total == 0:
+        return {"is_flagged": False, "message": "No valid digits found."}
+
+    actual_counts = Counter(digits)
+    
+    # 3. Calculate Chi-Squared Statistics
+    # Critical value for df=8 (9 digits - 1) at p=0.05 is ~15.51
+    chi_squared = 0.0
+    expected_dist = {d: math.log10(1 + 1/d) for d in range(1, 10)}
+    actual_dist = {d: actual_counts.get(d, 0) / total for d in range(1, 10)}
+    
+    for d in range(1, 10):
+        expected_count = expected_dist[d] * total
+        actual_count = actual_counts.get(d, 0)
+        chi_squared += ((actual_count - expected_count) ** 2) / expected_count
+        
+    critical_value = 15.51
+    is_flagged = chi_squared > critical_value
+    
+    return {
+        "is_flagged": is_flagged,
+        "chi_squared": chi_squared,
+        "critical_value": critical_value,
+        "actual_distribution": actual_dist,
+        "expected_distribution": expected_dist,
+        "sample_size": total,
+        "title": "Anomali Distribusi Digit (Benford)" if is_flagged else "Distribusi Digit Normal",
+        "description": (
+            f"Ditemukan penyimpangan statistik signifikan (Chi-sq: {chi_squared:.2f}). "
+            "Angka dalam daftar kreditur mungkin telah dimanipulasi atau tidak alami."
+        ) if is_flagged else "Pola angka sesuai dengan distribusi alami Benford."
+    }
 
 def calculate_financial_ratios(data: Dict[str, float]) -> Dict[str, Any]:
     """
