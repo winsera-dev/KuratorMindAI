@@ -180,8 +180,16 @@ function PaginatedTableSection({ list, formatCurrency, onViewEvidence }: any) {
                 </div>
               </td>
               <td className="px-5 py-4 text-right">
-                <div className="font-mono text-sm font-bold text-accent-blue tabular-nums">
-                  {formatCurrency(claim.claim_amount)}
+                <div className={cn(
+                  "font-mono text-sm font-bold tabular-nums flex flex-col items-end gap-1",
+                  (claim.claim_amount || 0) <= 0 ? "text-accent-rose" : "text-accent-blue"
+                )}>
+                  <span>{formatCurrency(claim.claim_amount)}</span>
+                  {(claim.claim_amount || 0) <= 0 && (
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-accent-rose/80 flex items-center gap-1">
+                      <AlertCircle size={10} /> Invalid Amount
+                    </span>
+                  )}
                 </div>
               </td>
               <td className="px-5 py-4">

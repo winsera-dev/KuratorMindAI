@@ -73,3 +73,23 @@ def detect_accounting_anomalies(data: Dict[str, float]) -> List[Dict[str, Any]]:
         })
         
     return anomalies
+
+def detect_claim_discrepancies(claimed_amount: float, ledger_amount: float, threshold: float = 0.05) -> Dict[str, Any]:
+    """
+    Calculate variance between claimed amount and ledger amount.
+    Returns audit flag details if variance exceeds threshold.
+    """
+    if ledger_amount == 0:
+        variance = 1.0 if claimed_amount > 0 else 0
+    else:
+        variance = abs(claimed_amount - ledger_amount) / ledger_amount
+        
+    is_discrepancy = variance > threshold
+    
+    return {
+        "is_discrepancy": is_discrepancy,
+        "variance": variance,
+        "claimed_amount": claimed_amount,
+        "ledger_amount": ledger_amount,
+        "severity": "critical" if variance > 0.5 else "high" if variance > 0.2 else "medium" if is_discrepancy else "low"
+    }

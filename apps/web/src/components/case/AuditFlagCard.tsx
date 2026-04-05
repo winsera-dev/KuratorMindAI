@@ -38,6 +38,7 @@ export function AuditFlagCard({ flag, onToggleResolve, onViewEvidence }: AuditFl
     non_compliance: "PSAK Non-Compliance",
     anomaly: "Financial Anomaly",
     inflated_claim: "Inflated Claim Value",
+    conflict_of_interest: "Conflict of Interest",
   };
 
   const config = severityConfig[flag.severity];

@@ -11,11 +11,16 @@ Main entry point for the agent backend API. Exposes endpoints for:
 import logging
 import os
 from dotenv import load_dotenv  # type: ignore
+import jwt  # PyJWT
 
 # Configure logging to show INFO-level messages from our services
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s: %(message)s")
-from fastapi import FastAPI  # type: ignore
+from fastapi import FastAPI, Request  # type: ignore
 from fastapi.middleware.cors import CORSMiddleware  # type: ignore
+from fastapi.responses import JSONResponse  # type: ignore
+from slowapi import Limiter, _rate_limit_exceeded_handler  # type: ignore
+from slowapi.util import get_remote_address  # type: ignore
+from slowapi.errors import RateLimitExceeded  # type: ignore
 
 # Load environment variables
 # Look for .env in apps/agents/
@@ -27,11 +32,18 @@ else:
     # Fallback for standard deployment
     load_dotenv()
 
+# Rate limiter — keyed by client IP. Protects Gemini endpoints from abuse.
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
 app = FastAPI(
     title="KuratorMind AI — Agent API",
     description="Multi-agent forensic backend for Indonesian Kurators",
     version="0.1.0",
 )
+
+# Attach limiter to app state so decorators can resolve it
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS — allow Next.js frontend
 app.add_middleware(
@@ -45,6 +57,53 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------------------------
+# Auth Middleware (Feature-Flagged)
+# Set AUTH_ENABLED=true in .env to enforce JWT validation on all API routes.
+# Set AUTH_ENABLED=false (default) to allow all requests through (demo / dev mode).
+# ---------------------------------------------------------------------------
+
+# Public routes that never require authentication
+_AUTH_SKIP_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/agents"}
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """Optional JWT gate. Enforced only when AUTH_ENABLED=true in .env."""
+    auth_enabled = os.getenv("AUTH_ENABLED", "false").lower() == "true"
+
+    # If the flag is off, let everything through — no performance cost
+    if not auth_enabled or request.url.path in _AUTH_SKIP_PATHS:
+        return await call_next(request)
+
+    # Extract Bearer token
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.startswith("Bearer "):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Missing or malformed Authorization header."},
+        )
+
+    token = authorization.removeprefix("Bearer ").strip()
+    jwt_secret = os.getenv("SUPABASE_JWT_SECRET", "")
+
+    try:
+        payload = jwt.decode(
+            token,
+            jwt_secret,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+        # Attach user_id to request state for downstream use
+        request.state.user_id = payload.get("sub")
+    except jwt.ExpiredSignatureError:
+        return JSONResponse(status_code=401, content={"detail": "Token has expired."})
+    except jwt.InvalidTokenError as exc:
+        return JSONResponse(status_code=401, content={"detail": f"Invalid token: {exc}"})
+
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def log_requests(request, call_next):
     import time

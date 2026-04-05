@@ -13,16 +13,18 @@ import {
   Gavel,
   CheckCircle2,
   AlertCircle,
-  FileText as FileIcon
+  FileText as FileIcon,
+  Pencil
 } from "lucide-react";
 import { getCaseStats } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface CaseCardProps {
   caseData: any;
+  onEdit?: (caseData: any) => void;
 }
 
-export default function CaseCard({ caseData }: CaseCardProps) {
+export default function CaseCard({ caseData, onEdit }: CaseCardProps) {
   const [stats, setStats] = useState<{
     document_count: number;
     total_claims_idr: number;
@@ -74,8 +76,23 @@ export default function CaseCard({ caseData }: CaseCardProps) {
             {caseData.debtor_entity || "Undisclosed Entity"}
           </p>
         </div>
-        <div className="w-10 h-10 rounded-xl bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-muted group-hover:text-accent-blue group-hover:bg-accent-blue/5 transition-all shrink-0">
-          <Scale className="w-5 h-5" />
+        <div className="flex items-center gap-2">
+          {onEdit && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onEdit(caseData);
+              }}
+              className="w-10 h-10 rounded-xl bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-muted hover:text-accent-blue hover:bg-accent-blue/10 hover:border-accent-blue/30 transition-all shrink-0 relative z-10"
+              title="Edit Workspace"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          )}
+          <div className="w-10 h-10 rounded-xl bg-bg-elevated border border-border-subtle flex items-center justify-center text-text-muted group-hover:text-accent-blue group-hover:bg-accent-blue/5 transition-all shrink-0">
+            <Scale className="w-5 h-5" />
+          </div>
         </div>
       </div>
 

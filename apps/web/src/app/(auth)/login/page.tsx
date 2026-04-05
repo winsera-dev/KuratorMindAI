@@ -24,7 +24,11 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setMessage({ type: "error", text: error.message });
+      if (error.status === 400 || error.message.toLowerCase().includes("invalid")) {
+        setMessage({ type: "error", text: "Invalid credentials. If you haven't registered, please create an account first." });
+      } else {
+        setMessage({ type: "error", text: error.message });
+      }
     } else {
       setMessage({ type: "success", text: "Check your email for the magic link!" });
     }

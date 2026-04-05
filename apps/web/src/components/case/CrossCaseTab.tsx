@@ -31,7 +31,8 @@ export function CrossCaseTab({ caseId, onViewEvidence }: CrossCaseTabProps) {
   const [data, setData] = useState<{
     conflicts: AuditFlag[];
     entities: GlobalEntity[];
-  }>({ conflicts: [], entities: [] });
+    totalCases: number;
+  }>({ conflicts: [], entities: [], totalCases: 0 });
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
@@ -56,6 +57,58 @@ export function CrossCaseTab({ caseId, onViewEvidence }: CrossCaseTabProps) {
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <Loader2 size={32} className="animate-spin text-accent-cyan mb-4" />
         <p className="text-sm text-text-muted">Analyzing global patterns across KuratorMind network…</p>
+      </div>
+    );
+  }
+
+  // TC-DISC-04: Minimum case guard — cross-case analysis requires 2+ cases
+  const isSingleCase = data.totalCases < 2;
+  const hasInsights = data.conflicts.length > 0 || data.entities.length > 0;
+
+  if (isSingleCase && !error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+        <div className="p-5 rounded-2xl bg-accent-blue/10 text-accent-blue">
+          <ShieldAlert size={36} />
+        </div>
+        <div>
+          <h3 className="text-xl font-black text-text-primary uppercase tracking-tight">Context Required</h3>
+          <p className="text-sm text-text-muted mt-2 max-w-sm mx-auto leading-relaxed">
+            KuratorMind Cross-Case Intelligence requires at least **2 active cases** in your vault to detect systemic risks, recurring fraudulent entities, or legal contradictions across proceedings.
+          </p>
+        </div>
+        <div className="mt-4 flex flex-col items-center gap-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-text-muted/60">Current Vault: {data.totalCases} Case</p>
+          <button
+            onClick={() => window.location.href = "/dashboard"}
+            className="px-6 py-2.5 rounded-xl bg-text-primary text-white text-xs font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-black/10"
+          >
+            Create New Case
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasInsights && !error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+        <div className="p-5 rounded-2xl bg-secondary text-text-muted">
+          <GanttChartSquare size={36} className="opacity-40" />
+        </div>
+        <div>
+          <h3 className="text-base font-bold text-text-primary">No Cross-Case Overlaps Detected</h3>
+          <p className="text-sm text-text-muted mt-2 max-w-sm mx-auto">
+            We analyzed your {data.totalCases} cases and found no conflicting entities or systemic red flags between them. Your forensic perimeter is clean.
+          </p>
+        </div>
+        <button
+          onClick={fetchData}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-elevated border border-border-default hover:bg-tertiary transition-all text-sm text-text-secondary"
+        >
+          <RefreshCw size={14} />
+          Re-analyze Vault
+        </button>
       </div>
     );
   }

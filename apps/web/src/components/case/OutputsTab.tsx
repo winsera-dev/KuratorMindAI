@@ -4,7 +4,8 @@ import React, { useEffect, useState, useCallback } from "react";
 import { 
   getGeneratedOutputs, 
   generateReport, 
-  getOutputSignedUrl 
+  getOutputSignedUrl,
+  streamChat
 } from "@/lib/api";
 import { GeneratedOutput, OutputType } from "@/types";
 import { toast } from "sonner";
@@ -44,6 +45,7 @@ export function OutputsTab({ caseId, documentCount = 0 }: OutputsTabProps) {
   const [outputs, setOutputs] = useState<GeneratedOutput[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -67,17 +69,46 @@ export function OutputsTab({ caseId, documentCount = 0 }: OutputsTabProps) {
   const handleGenerate = async (type: OutputType, title: string) => {
     if (documentCount === 0) return; // guard: no documents
     setGenerating(type);
+    setStatusMessage("Initializing Output Architect...");
+    
     toast.info(`Generating ${title}...`, { id: "gen" });
+
     try {
-      await generateReport(caseId, type, title);
-      toast.success(`${title} generated successfully`, { id: "gen" });
-      // Wait a bit and refresh (or the agent will update the DB)
-      setTimeout(fetchData, 5000); 
+      // TC-RPT-07: Use streamChat for real-time SSE progress events
+      await streamChat(
+        {
+          case_id: caseId,
+          session_id: `gen-${Date.now()}`, // Temporary session for generation
+          message: `Generate a ${title} (${type}) for this case immediately.`,
+          agent_override: "output_architect"
+        },
+        {
+          onStatus: (agent, message) => {
+            console.log(`[${agent}] ${message}`);
+            setStatusMessage(message);
+            toast.info(message, { id: "gen" });
+          },
+          onToken: (token) => {
+            // We don't need tokens in the UI, just the status
+          },
+          onDone: () => {
+            toast.success(`${title} generated successfully`, { id: "gen" });
+            setStatusMessage(null);
+            setGenerating(null);
+            fetchData(); // Refresh list
+          },
+          onError: (err) => {
+            toast.error(`Generation failed: ${err}`, { id: "gen" });
+            setStatusMessage(null);
+            setGenerating(null);
+          }
+        }
+      );
     } catch (err: any) {
       console.error("Manual generation failed:", err);
       toast.error(`Generation failed: ${err.message || "Unknown error"}`, { id: "gen" });
-    } finally {
       setGenerating(null);
+      setStatusMessage(null);
     }
   };
 
@@ -165,10 +196,15 @@ export function OutputsTab({ caseId, documentCount = 0 }: OutputsTabProps) {
                   )}
                 >
                   {generating === tpl.id ? (
-                    <>
-                      <RotateCw size={14} className="animate-spin" />
-                      Generating...
-                    </>
+                    <div className="flex flex-col items-center gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <RotateCw size={14} className="animate-spin" />
+                        <span className="animate-pulse">Generating...</span>
+                      </div>
+                      <span className="text-[9px] lowercase font-medium text-text-muted/80 normal-case tracking-tight italic">
+                        {statusMessage || "Architect thinking..."}
+                      </span>
+                    </div>
                   ) : (
                     <>
                       <Plus size={14} />

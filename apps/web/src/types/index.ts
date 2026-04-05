@@ -132,6 +132,7 @@ export interface GlobalEntity {
   aliases: string[];
   is_verified: boolean;
   risk_score: number;
+  occurrences?: any[];
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;

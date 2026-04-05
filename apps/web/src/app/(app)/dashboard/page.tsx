@@ -7,7 +7,8 @@ import {
   Filter, 
   Scale, 
   Loader2,
-  RefreshCw
+  RefreshCw,
+  AlertTriangle
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import CaseModal from "@/components/modals/CaseModal";
@@ -17,8 +18,11 @@ import { getCases } from "@/lib/api";
 export default function DashboardPage() {
   const [cases, setCases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
+  const [editingCase, setEditingCase] = useState<any>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -26,6 +30,7 @@ export default function DashboardPage() {
 
   const fetchCases = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       // Get current user session
       const { data: { session } } = await supabase.auth.getSession();
@@ -37,6 +42,7 @@ export default function DashboardPage() {
       setCases(data || []);
     } catch (err: any) {
       console.error("Error fetching cases:", err.message || err);
+      setError(err.message || "Failed to connect to the backend. Is the agent server running?");
     } finally {
       setLoading(false);
     }
@@ -74,7 +80,11 @@ export default function DashboardPage() {
           </button>
           
           <button 
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setModalMode("create");
+              setEditingCase(null);
+              setIsModalOpen(true);
+            }}
             className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-accent-blue hover:bg-accent-blue-hover text-white font-bold transition-all shadow-lg hover:shadow-glow-blue whitespace-nowrap"
           >
             <Plus className="w-5 h-5" />
@@ -103,6 +113,26 @@ export default function DashboardPage() {
 
       {/* Case Grid */}
       <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar pb-12">
+        {/* TC-DASH-05: API error state with retry */}
+        {error && !loading && (
+          <div className="mb-6 flex flex-col items-center justify-center gap-4 p-8 rounded-2xl bg-accent-rose/5 border border-accent-rose/20 text-center">
+            <div className="p-4 rounded-2xl bg-accent-rose/10 text-accent-rose">
+              <AlertTriangle size={28} />
+            </div>
+            <div>
+              <h4 className="font-bold text-text-primary text-base">Connection Failed</h4>
+              <p className="text-sm text-text-muted mt-1 max-w-sm">{error}</p>
+            </div>
+            <button
+              onClick={() => setRefreshKey(prev => prev + 1)}
+              className="flex items-center gap-2 px-5 py-2 bg-accent-rose text-white text-xs font-black rounded-xl hover:opacity-90 transition-all uppercase tracking-widest"
+            >
+              <RefreshCw size={14} />
+              Retry
+            </button>
+          </div>
+        )}
+
         {loading && cases.length === 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3].map(i => (
@@ -112,10 +142,18 @@ export default function DashboardPage() {
         ) : filteredCases.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCases.map((caseItem) => (
-              <CaseCard key={caseItem.id} caseData={caseItem} />
+              <CaseCard 
+                key={caseItem.id} 
+                caseData={caseItem} 
+                onEdit={(data) => {
+                  setModalMode("edit");
+                  setEditingCase(data);
+                  setIsModalOpen(true);
+                }}
+              />
             ))}
           </div>
-        ) : (
+        ) : !error ? (
           <div className="h-[400px] flex flex-col items-center justify-center border-2 border-dashed border-border-default rounded-3xl opacity-60 bg-secondary/20">
              <div className="p-5 bg-card border border-border-subtle rounded-full mb-6">
                 <Scale className="w-12 h-12 text-text-muted" />
@@ -125,21 +163,29 @@ export default function DashboardPage() {
                Initiate a new forensic investigation by clicking the "New Workspace" button above.
              </p>
              <button 
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => {
+                  setModalMode("create");
+                  setEditingCase(null);
+                  setIsModalOpen(true);
+                }}
                 className="mt-6 text-accent-blue text-sm font-bold hover:underline"
              >
                Create your first case
              </button>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Case Modal (Unifed Create/Edit) */}
       <CaseModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingCase(null);
+        }}
         onSuccess={() => setRefreshKey(prev => prev + 1)}
-        mode="create"
+        mode={modalMode}
+        initialData={editingCase}
         userId={userId || undefined}
       />
     </div>

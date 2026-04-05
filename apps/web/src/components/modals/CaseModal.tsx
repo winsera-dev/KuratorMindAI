@@ -20,6 +20,17 @@ import { createCase, updateCase, deleteCase } from "@/lib/api";
 import { Case, CaseStage } from "@/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { z } from "zod";
+
+const caseSchema = z.object({
+  name: z.string().min(3, "Workspace Name must be at least 3 characters"),
+  debtor_entity: z.string().min(3, "Debtor Entity must be at least 3 characters"),
+  case_number: z.string().min(3, "Case Number is required"),
+  court_name: z.string().min(3, "Court Name is required"),
+  stage_started_at: z.string().min(1, "Stage Start Date is required"),
+  stage: z.string(),
+  description: z.string().optional(),
+});
 
 const STAGE_OPTIONS: Record<CaseStage, string> = {
   petition: "Petition (Filing)",
@@ -105,6 +116,8 @@ export default function CaseModal({
     setError(null);
 
     try {
+      caseSchema.parse(formData);
+
       if (mode === "create") {
         if (!userId) throw new Error("User ID is required for creation");
         const res = await createCase({
@@ -121,6 +134,12 @@ export default function CaseModal({
       }
       onClose();
     } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        const msg = err.issues[0].message;
+        setError(msg);
+        toast.error(msg);
+        return;
+      }
       setError(err.message || `Failed to ${mode} case`);
       toast.error(err.message || `Failed to ${mode} case`);
     } finally {
@@ -172,32 +191,34 @@ export default function CaseModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 w-screen h-screen bg-black/80 backdrop-blur-md z-[9999] flex items-center justify-center p-4 transition-all"
+            className="fixed inset-0 w-full h-full bg-slate-950/50 backdrop-blur-[1px] z-[9999] flex items-center justify-center p-6 transition-all"
           >
-            {/* Modal Content */}
+            {/* Modal Container */}
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-card border border-border-default w-full max-w-2xl rounded-2xl shadow-elevated overflow-hidden flex flex-col max-h-[90vh] relative z-[110]"
+              className="bg-card border border-border-default w-full max-w-2xl rounded-3xl shadow-[0_32px_64px_-16px_rgba(0,0,0,1)] flex flex-col z-[10000]"
+              style={{ maxHeight: "min(92vh, 780px)" }}
             >
-              {/* Header */}
-              <div className="p-6 border-b border-border-subtle bg-secondary/80 backdrop-blur-md flex items-center justify-between">
+              {/* ── STICKY HEADER ── */}
+              <div className="shrink-0 px-8 py-6 border-b border-border-subtle bg-secondary/60 backdrop-blur-lg flex items-center justify-between rounded-t-3xl">
                 <div className="flex items-center gap-4">
-                   <div className="w-12 h-12 rounded-2xl bg-accent-blue/10 flex items-center justify-center text-accent-blue border border-accent-blue/20">
-                      {mode === "create" ? <Plus size={24} /> : <Scale size={24} />}
-                   </div>
-                   <div>
-                      <h2 className="text-xl font-black tracking-tight text-text-primary">
-                        {mode === "create" ? "Initialize Workspace" : "Workspace Intelligence"}
-                      </h2>
-                      <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest mt-0.5">
-                        {mode === "create" ? "New Forensic Evidence Environment" : "Update Legal Metadata & Lifecycle"}
-                      </p>
-                   </div>
+                  <div className="w-11 h-11 rounded-2xl bg-accent-blue/10 flex items-center justify-center text-accent-blue border border-accent-blue/20">
+                    {mode === "create" ? <Plus size={22} /> : <Scale size={22} />}
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black tracking-tight text-text-primary">
+                      {mode === "create" ? "Initialize Workspace" : "Workspace Intelligence"}
+                    </h2>
+                    <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest mt-0.5">
+                      {mode === "create" ? "New Forensic Evidence Environment" : "Update Legal Metadata & Lifecycle"}
+                    </p>
+                  </div>
                 </div>
-                <button 
+                <button
+                  type="button"
                   onClick={onClose}
                   className="p-2 hover:bg-tertiary rounded-xl transition-all text-text-muted hover:text-text-primary border border-transparent hover:border-border-default"
                 >
@@ -205,8 +226,12 @@ export default function CaseModal({
                 </button>
               </div>
 
-              {/* Form */}
-              <form onSubmit={handleSubmit} className="p-8 overflow-y-auto space-y-8 custom-scrollbar">
+              {/* ── SCROLLABLE FORM BODY ── */}
+              <form
+                id="case-modal-form"
+                onSubmit={handleSubmit}
+                className="flex-1 overflow-y-auto px-8 py-7 space-y-6 custom-scrollbar"
+              >
                 {error && (
                   <div className="p-4 bg-accent-rose/10 border border-accent-rose/20 text-accent-rose text-xs font-bold rounded-xl flex items-center gap-2">
                     <X size={14} className="shrink-0" />
@@ -227,7 +252,7 @@ export default function CaseModal({
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {/* Case Name */}
                   <div className="space-y-2 col-span-full">
                     <label className="text-[10px] font-black text-text-muted uppercase tracking-widest flex items-center gap-2 ml-1">
@@ -282,6 +307,44 @@ export default function CaseModal({
                     />
                   </div>
 
+                  {/* Empty spacer — keeps Court half-width, right column empty */}
+                  <div />
+
+                  {/* Case Stage */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-text-muted uppercase tracking-widest flex items-center gap-2 ml-1">
+                      <Activity className="w-3.5 h-3.5" /> Current Lifecycle Stage
+                    </label>
+                    <div className="relative group">
+                      <select
+                        className="w-full bg-primary border border-border-default rounded-xl px-4 py-3 text-sm font-bold text-text-primary focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/40 outline-none transition-all appearance-none cursor-pointer"
+                        value={formData.stage}
+                        onChange={(e) => {
+                          const newStage = e.target.value as CaseStage;
+                          const today = new Date().toISOString().split("T")[0];
+                          const stageChanged = newStage !== (initialData?.stage ?? "pkpu_temp");
+                          setFormData({
+                            ...formData,
+                            stage: newStage,
+                            stage_started_at:
+                              mode === "create"
+                                ? formData.stage_started_at || today
+                                : stageChanged
+                                ? today
+                                : formData.stage_started_at,
+                          });
+                        }}
+                      >
+                        {Object.entries(STAGE_OPTIONS).map(([id, label]) => (
+                          <option key={id} value={id}>{label}</option>
+                        ))}
+                      </select>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
+                        <Plus size={14} className="rotate-45" />
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Stage Start Date */}
                   <div className="p-4 bg-secondary/50 rounded-2xl border border-border-default space-y-2">
                     <label className="text-[10px] font-black text-text-muted uppercase tracking-widest flex items-center gap-2">
@@ -294,102 +357,68 @@ export default function CaseModal({
                       onChange={(e) => setFormData({...formData, stage_started_at: e.target.value})}
                     />
                   </div>
-
-                  {/* Case Stage */}
-                  <div className="space-y-2 col-span-full">
-                     <label className="text-[10px] font-black text-text-muted uppercase tracking-widest flex items-center gap-2 ml-1">
-                      <Activity className="w-3.5 h-3.5" /> Current Lifecycle Stage
-                    </label>
-                    <div className="relative group">
-                       <select
-                        className="w-full bg-primary border border-border-default rounded-xl px-4 py-3 text-sm font-bold text-text-primary focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/40 outline-none transition-all appearance-none cursor-pointer"
-                        value={formData.stage}
-                        onChange={(e) => {
-                          const newStage = e.target.value as CaseStage;
-                          const today = new Date().toISOString().split("T")[0];
-                          const stageChanged = newStage !== (initialData?.stage ?? "pkpu_temp");
-                          setFormData({
-                            ...formData,
-                            stage: newStage,
-                            // Auto-fill date: in create mode, only if empty; in edit mode, if stage changed
-                            stage_started_at:
-                              mode === "create"
-                                ? formData.stage_started_at || today
-                                : stageChanged
-                                ? today
-                                : formData.stage_started_at,
-                          });
-                        }}
-                      >
-                        {Object.entries(STAGE_OPTIONS).map(([id, label]) => (
-                           <option key={id} value={id}>{label}</option>
-                        ))}
-                      </select>
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
-                         <Plus size={14} className="rotate-45" />
-                      </div>
-                    </div>
-                  </div>
                 </div>
 
+                {/* Audit Notes */}
                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-text-muted uppercase tracking-widest ml-1 italic opacity-60">
-                      Audit Notes / Intelligence Overview
-                   </label>
-                   <textarea
+                  <label className="text-[10px] font-black text-text-muted uppercase tracking-widest ml-1 italic opacity-60">
+                    Audit Notes / Intelligence Overview
+                  </label>
+                  <textarea
                     rows={3}
                     placeholder="Brief overview of the scope or firm-specific notes..."
                     className="w-full bg-secondary/20 border border-border-default rounded-2xl px-4 py-3 text-sm font-medium text-text-secondary outline-none focus:border-accent-blue/50 transition-all resize-none"
                     value={formData.description}
                     onChange={(e) => setFormData({...formData, description: e.target.value})}
-                   />
-                </div>
-
-                {/* Footer Actions */}
-                <div className="pt-6 flex gap-4 justify-between items-center border-t border-border-subtle mt-8">
-                  {mode === "edit" ? (
-                    <button
-                      type="button"
-                      onClick={handleDelete}
-                      className="px-6 py-3 rounded-xl text-accent-rose hover:text-white hover:bg-accent-rose transition-all text-xs font-black uppercase tracking-widest border border-accent-rose/20"
-                      disabled={loading}
-                    >
-                      Delete Workspace
-                    </button>
-                  ) : (
-                    <div />
-                  )}
-                  <div className="flex gap-4 items-center">
-                    <button
-                      type="button"
-                      onClick={onClose}
-                      className="px-6 py-3 rounded-xl text-text-muted hover:text-text-primary hover:bg-tertiary transition-all text-xs font-black uppercase tracking-widest"
-                      disabled={loading}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="flex-1 min-w-[200px] flex items-center justify-center gap-2 py-4 bg-white text-black rounded-xl hover:bg-white/90 active:scale-95 transition-all shadow-xl shadow-white/5 disabled:opacity-50"
-                    >
-                      {loading ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : mode === "create" ? (
-                        <>
-                          <Plus className="w-5 h-5" />
-                          <span className="text-sm font-black uppercase tracking-tight">Create Workspace</span>
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-5 h-5" />
-                          <span className="text-sm font-black uppercase tracking-tight">Update Intelligence</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  />
                 </div>
               </form>
+
+              {/* ── STICKY FOOTER ── */}
+              <div className="shrink-0 px-8 py-5 border-t border-border-subtle bg-secondary/40 backdrop-blur-lg rounded-b-3xl flex gap-4 justify-between items-center">
+                {mode === "edit" ? (
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    className="px-5 py-2.5 rounded-xl text-accent-rose hover:text-white hover:bg-accent-rose transition-all text-xs font-black uppercase tracking-widest border border-accent-rose/20"
+                    disabled={loading}
+                  >
+                    Delete Workspace
+                  </button>
+                ) : (
+                  <div />
+                )}
+                <div className="flex gap-3 items-center">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-5 py-2.5 rounded-xl text-text-muted hover:text-text-primary hover:bg-tertiary transition-all text-xs font-black uppercase tracking-widest"
+                    disabled={loading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    form="case-modal-form"
+                    disabled={loading}
+                    className="min-w-[180px] flex items-center justify-center gap-2 px-6 py-3 bg-white text-black rounded-xl hover:bg-white/90 active:scale-95 transition-all shadow-xl shadow-white/5 disabled:opacity-50 font-black text-sm uppercase tracking-tight"
+                  >
+                    {loading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : mode === "create" ? (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        Create Workspace
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Update Intelligence
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         </>
@@ -400,3 +429,5 @@ export default function CaseModal({
   if (!mounted) return null;
   return createPortal(modalContent, document.body);
 }
+
+

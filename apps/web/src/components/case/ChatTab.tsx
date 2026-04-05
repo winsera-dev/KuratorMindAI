@@ -187,9 +187,26 @@ export function ChatTab({ caseId, onViewSource }: ChatTabProps) {
 
       {/* 2. Messages Core */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-none">
-        {messages.map((m, i) => (
-          <ChatMessage key={i} m={m} onViewSource={onViewSource} />
-        ))}
+        {!historyLoaded ? (
+          <div className="space-y-6">
+            <div className="flex gap-4 max-w-[85%] animate-pulse">
+              <div className="w-9 h-9 rounded-xl bg-accent-blue/10 shrink-0" />
+              <div className="h-16 w-full bg-secondary/50 rounded-2xl rounded-tl-sm" />
+            </div>
+            <div className="flex gap-4 max-w-[85%] ml-auto flex-row-reverse animate-pulse">
+              <div className="w-9 h-9 rounded-xl bg-text-muted/10 shrink-0" />
+              <div className="h-12 w-48 bg-secondary/50 rounded-2xl rounded-tr-sm" />
+            </div>
+            <div className="flex gap-4 max-w-[85%] animate-pulse">
+              <div className="w-9 h-9 rounded-xl bg-accent-blue/10 shrink-0" />
+              <div className="h-24 w-full bg-secondary/50 rounded-2xl rounded-tl-sm" />
+            </div>
+          </div>
+        ) : (
+          messages.map((m, i) => (
+            <ChatMessage key={i} m={m} onViewSource={onViewSource} />
+          ))
+        )}
         {streaming && agentStatus && (
           <div className="flex justify-start gap-4 animate-pulse">
             <div className="w-9 h-9 rounded-xl bg-accent-blue/5 border border-accent-blue/20 flex items-center justify-center shrink-0">

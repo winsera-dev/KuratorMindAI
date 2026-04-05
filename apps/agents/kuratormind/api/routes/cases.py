@@ -108,14 +108,33 @@ async def create_case(
         if hasattr(val, "isoformat"):
             case_data["stage_started_at"] = val.isoformat()
 
+    # TC-CASE-10: Duplicate case_number guard — only if case_number is provided
+    if case_data.get("case_number"):
+        dup_check = (
+            sb.table("cases")
+            .select("id")
+            .eq("user_id", current_user)
+            .eq("case_number", case_data["case_number"])
+            .limit(1)
+            .execute()
+        )
+        if dup_check.data:
+            raise HTTPException(
+                status_code=409,
+                detail=f"A case with number '{case_data['case_number']}' already exists in your vault.",
+            )
+
     try:
         result = sb.table("cases").insert(case_data).execute()
         if not result.data:
             raise HTTPException(status_code=500, detail="Failed to create case record.")
         return result.data[0]
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Create case failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
+
 
 @router.get("/cases/{case_id}/stats", response_model=CaseStats)
 async def get_case_stats(

@@ -16,11 +16,17 @@ import asyncio
 from typing import Any, AsyncGenerator, Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException  # type: ignore
+from fastapi import Request as FastAPIRequest  # type: ignore
+from slowapi import Limiter  # type: ignore
+from slowapi.util import get_remote_address  # type: ignore
 from pydantic import BaseModel  # type: ignore
 from sse_starlette.sse import EventSourceResponse  # type: ignore
 from google import genai  # type: ignore
 from supabase import create_client  # type: ignore
 from kuratormind.api.deps import get_current_user
+# Shared limiter instance — registered in main.py
+limiter = Limiter(key_func=get_remote_address)
+
 from kuratormind.tools.supabase_tools import (
     semantic_search,
     get_case_consolidated_findings,
@@ -261,8 +267,10 @@ def _route_to_agent(
 
 
 @router.post("/chat")
+@limiter.limit("10/minute")
 async def chat(
-    request: ChatRequest,
+    request: FastAPIRequest,
+    chat_request: ChatRequest,
     current_user: Annotated[str, Depends(get_current_user)],
 ):
     """
@@ -280,25 +288,25 @@ async def chat(
         
         # Ensure session_id exists (needed for report generation calls)
         # MUST be a valid UUID string for Supabase
-        session_id = request.session_id or str(uuid.uuid4())
+        session_id = chat_request.session_id or str(uuid.uuid4())
 
         try:
             # 1. Upsert session + save user message
             # user_id always comes from the verified JWT, not request body
             resolved_user_id = current_user
             if sb:
-                _upsert_session(sb, session_id, request.case_id, resolved_user_id)
+                _upsert_session(sb, session_id, chat_request.case_id, resolved_user_id)
                 _save_message(
                     sb,
                     session_id=session_id,
-                    case_id=request.case_id,
+                    case_id=chat_request.case_id,
                     role="user",
-                    content=request.message,
+                    content=chat_request.message,
                 )
 
             # 2. Signal start — show which agent is being routed
             agent_name, system_prompt_for_agent = _route_to_agent(
-                request.message, request.agent_override
+                chat_request.message, chat_request.agent_override
             )
 
             yield {
@@ -313,11 +321,11 @@ async def chat(
             }
 
             # 3. GUARD: For output_architect, block if no documents are ingested
-            if request.agent_override == "output_architect" and sb:
+            if chat_request.agent_override == "output_architect" and sb:
                 doc_check = (
                     sb.table("case_documents")
                     .select("id", count="exact")
-                    .eq("case_id", request.case_id)
+                    .eq("case_id", chat_request.case_id)
                     .eq("status", "ready")
                     .execute()
                 )
@@ -336,7 +344,7 @@ async def chat(
             # 4. Fetch case document context (RAG)
             case_context, retrieved_chunks = "", []
             if sb:
-                case_context, retrieved_chunks = _fetch_case_context(sb, request.case_id, request.message)
+                case_context, retrieved_chunks = _fetch_case_context(sb, chat_request.case_id, chat_request.message)
 
             # 4. Build chat history for multi-turn context
             history: list[dict] = []
@@ -344,7 +352,7 @@ async def chat(
                 history = _get_chat_history(sb, session_id)
 
             # 5. Assemble system prompt using the routed agent
-            if request.agent_override == "output_architect":
+            if chat_request.agent_override == "output_architect":
                 system_prompt = system_prompt_for_agent
                 if case_context:
                     system_prompt += f"\n\n## Data Context for Report Extraction\n{case_context}"
@@ -368,7 +376,7 @@ async def chat(
                     {"role": role, "parts": [{"text": msg["content"]}]}
                 )
             contents.append(
-                {"role": "USER", "parts": [{"text": request.message}]}
+                {"role": "USER", "parts": [{"text": chat_request.message}]}
             )
 
             yield {
@@ -501,13 +509,22 @@ async def chat(
                         tool_name = fc.name
                         tool_args = fc.args or {}
                         
+                        # TC-RPT-07: Mapping tool calls to user-friendly progress messages
+                        friendly_msg = f"Executing {tool_name}…"
+                        if tool_name == "get_case_consolidated_findings":
+                            friendly_msg = "Gathering forensic findings across all agents…"
+                        elif tool_name == "generate_and_save_report":
+                            friendly_msg = f"Finalizing {tool_args.get('title', 'report')} and rendering PDF…"
+                        elif tool_name == "semantic_search":
+                            friendly_msg = "Scanning document vault for relevant deep-links…"
+
                         yield {
                             "event": "agent_status",
                             "data": json.dumps({
-                                "agent": request.agent_override or "lead_orchestrator",
+                                "agent": agent_name, # Use resolved agent_name
                                 "status": "executing_tool",
-                                "message": f"Executing {tool_name}…",
-                                "details": tool_args
+                                "message": friendly_msg,
+                                "details": tool_args if tool_name != "generate_and_save_report" else {} # Hide raw report content
                             }),
                         }
                         
@@ -516,7 +533,7 @@ async def chat(
                             if tool_name in TOOLS_MAP:
                                 # Inject case_id if missing but required
                                 if "case_id" in tool_args and not tool_args["case_id"]:
-                                    tool_args["case_id"] = request.case_id
+                                    tool_args["case_id"] = chat_request.case_id
                                 
                                 result = TOOLS_MAP[tool_name](**tool_args)
                             else:
@@ -571,7 +588,7 @@ async def chat(
                 _save_message(
                     sb,
                     session_id=session_id,
-                    case_id=request.case_id,
+                    case_id=chat_request.case_id,
                     role="assistant",
                     content=full_text,
                     agent_name=agent_name,

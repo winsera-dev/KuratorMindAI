@@ -125,7 +125,10 @@ export async function createCase(caseData: Partial<Case>): Promise<Case> {
     headers,
     body: JSON.stringify(caseData),
   });
-  if (!res.ok) throw new Error("Failed to create case");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to create case");
+  }
   return res.json();
 }
 /**
@@ -520,6 +523,7 @@ export async function streamChat(
     session_id: string;
     message: string;
     user_id?: string;
+    agent_override?: string;
   },
   callbacks: {
     onToken: (text: string) => void;
@@ -534,6 +538,13 @@ export async function streamChat(
     headers,
     body: JSON.stringify(request),
   });
+
+  if (res.status === 429) {
+    if (callbacks.onError) {
+      callbacks.onError("Rate limit exceeded. Please wait a moment before trying again.");
+    }
+    throw new Error("Rate limit exceeded");
+  }
 
   if (!res.ok) {
     throw new Error(`Chat request failed: ${res.status}`);
@@ -617,7 +628,18 @@ export async function checkHealth(): Promise<boolean> {
 export async function getGlobalConflicts(caseId: string): Promise<{
   conflicts: AuditFlag[];
   entities: any[];
+  totalCases: number;
 }> {
+  // 0. Fetch total case count for the user (for UI guard rails)
+  const { count: caseCount, error: countErr } = await supabase
+    .from("cases")
+    .select("id", { count: "exact", head: true });
+
+  if (countErr) {
+     console.error("Error fetching case count:", countErr);
+  }
+  const totalCases = caseCount || 0;
+
   // 1. Fetch conflict flags (Systemic Risks)
   const { data: flags, error: flagErr } = await supabase
     .from("audit_flags")
@@ -639,7 +661,11 @@ export async function getGlobalConflicts(caseId: string): Promise<{
   if (occErr) throw occErr;
 
   if (!localOccurrences || localOccurrences.length === 0) {
-    return { conflicts: (flags as AuditFlag[]) || [], entities: [] };
+    return { 
+      conflicts: (flags as AuditFlag[]) || [], 
+      entities: [],
+      totalCases
+    };
   }
 
   // 3. For each entity, fetch ALL its occurrences to see other cases
@@ -679,6 +705,7 @@ export async function getGlobalConflicts(caseId: string): Promise<{
 
   return {
     conflicts: (flags as AuditFlag[]) || [],
-    entities: overlappingEntities
+    entities: overlappingEntities,
+    totalCases
   };
 }
