@@ -18,9 +18,8 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s: %(messag
 from fastapi import FastAPI, Request  # type: ignore
 from fastapi.middleware.cors import CORSMiddleware  # type: ignore
 from fastapi.responses import JSONResponse  # type: ignore
-from slowapi import Limiter, _rate_limit_exceeded_handler  # type: ignore
-from slowapi.util import get_remote_address  # type: ignore
-from slowapi.errors import RateLimitExceeded  # type: ignore
+from slowapi.errors import RateLimitExceeded
+from kuratormind.api.limiter import limiter
 
 # Load environment variables
 # Look for .env in apps/agents/
@@ -33,7 +32,7 @@ else:
     load_dotenv()
 
 # Rate limiter — keyed by client IP. Protects Gemini endpoints from abuse.
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+# limiter initialization is shared in kuratormind.api.limiter
 
 app = FastAPI(
     title="KuratorMind AI — Agent API",
@@ -42,6 +41,7 @@ app = FastAPI(
 )
 
 # Attach limiter to app state so decorators can resolve it
+from slowapi import _rate_limit_exceeded_handler
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

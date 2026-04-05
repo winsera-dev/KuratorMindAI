@@ -12,14 +12,14 @@ test.describe('Authentication and Dashboard', () => {
   });
 
   test('TC-DASH-01: Should show shimmer skeletons during load', async ({ page }) => {
-    // To see skeletons, we might need to slow down the network or check for skeleton elements
-    // In Next.js, skeletons are often components named 'Skeleton' or with 'animate-pulse'
     await page.goto('/dashboard');
     
     // Check if any skeleton elements are present (this depends on implementation)
     const skeletons = page.locator('.animate-pulse');
-    // If they disappear quickly, this might be hard to catch without slowing down
-    // But we can check if they existed at some point if we use a specific locator
+    await expect(skeletons.first()).toBeVisible();
+    
+    // They should eventually disappear or be replaced by content
+    await expect(page.getByRole('heading', { name: /dashboard|my cases/i })).toBeVisible({ timeout: 15000 });
   });
 
   test('TC-AUTH-03: Should logout correctly', async ({ page }) => {

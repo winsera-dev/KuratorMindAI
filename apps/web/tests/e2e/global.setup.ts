@@ -9,7 +9,7 @@ setup('authenticate', async ({ page }) => {
 
   // 2. Perform authentication (using environment variables for security)
   // These should be set in the environment or .env.test
-  const email = process.env.TEST_USER_EMAIL || 'test@example.com';
+  const email = process.env.TEST_USER_EMAIL || 'test-user-a@kuratormind.ai';
   const password = process.env.TEST_USER_PASSWORD || 'password123';
 
   // Note: For initial setup, we assume these exist after database seeding

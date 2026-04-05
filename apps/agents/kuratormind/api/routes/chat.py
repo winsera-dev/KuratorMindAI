@@ -17,15 +17,12 @@ from typing import Any, AsyncGenerator, Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException  # type: ignore
 from fastapi import Request as FastAPIRequest  # type: ignore
-from slowapi import Limiter  # type: ignore
-from slowapi.util import get_remote_address  # type: ignore
 from pydantic import BaseModel  # type: ignore
 from sse_starlette.sse import EventSourceResponse  # type: ignore
 from google import genai  # type: ignore
 from supabase import create_client  # type: ignore
 from kuratormind.api.deps import get_current_user
-# Shared limiter instance — registered in main.py
-limiter = Limiter(key_func=get_remote_address)
+from kuratormind.api.limiter import limiter
 
 from kuratormind.tools.supabase_tools import (
     semantic_search,
@@ -267,7 +264,7 @@ def _route_to_agent(
 
 
 @router.post("/chat")
-@limiter.limit("10/minute")
+@limiter.limit("20/minute")
 async def chat(
     request: FastAPIRequest,
     chat_request: ChatRequest,

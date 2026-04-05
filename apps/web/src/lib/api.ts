@@ -204,27 +204,53 @@ export async function uploadDocument(
 ): Promise<UploadResponse> {
   const form = new FormData();
   form.append("case_id", caseId);
-  form.append("file", file);
+  const maxRetries = 3;
+  let delay = 1000; // Start with 1s
 
-  // For multipart/form-data we must NOT set Content-Type manually (browser sets boundary)
-  const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token;
-  const authHeaders: Record<string, string> = token
-    ? { Authorization: `Bearer ${token}` }
-    : {};
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const form = new FormData();
+      form.append("case_id", caseId);
+      form.append("file", file);
 
-  const res = await fetch(`${BASE_URL}/api/v1/documents/upload`, {
-    method: "POST",
-    headers: authHeaders,
-    body: form,
-  });
+      // For multipart/form-data we must NOT set Content-Type manually (browser sets boundary)
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token;
+      const authHeaders: Record<string, string> = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? "Upload failed");
+      const res = await fetch(`${BASE_URL}/api/v1/documents/upload`, {
+        method: "POST",
+        headers: authHeaders,
+        body: form,
+      });
+
+      if (res.ok) {
+        return res.json();
+      }
+
+      const err = await res.json().catch(() => ({}));
+      
+      // Don't retry on 4xx errors (Auth, Duplicate, Size) except specifically 429
+      if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+        throw new Error(err.detail || `Upload failed with status ${res.status}`);
+      }
+
+      // If it's a 429 or 5xx, we might want to retry
+      if (attempt === maxRetries) {
+        throw new Error(err.detail || `Upload failed after ${maxRetries} retries`);
+      }
+    } catch (error: any) {
+      if (attempt === maxRetries) throw error;
+      
+      console.warn(`[API] Upload attempt ${attempt + 1} failed. Retrying in ${delay}ms...`, error);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2; // Exponential backoff
+    }
   }
-
-  return res.json() as Promise<UploadResponse>;
+  
+  throw new Error('Upload failed unexpectedly');
 }
 
 /**

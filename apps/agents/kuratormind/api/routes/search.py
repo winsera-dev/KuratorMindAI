@@ -8,10 +8,11 @@ Used by the 'Discovery' tab to find forensic evidence.
 import logging
 import os
 from typing import List, Optional, Annotated
-from fastapi import APIRouter, HTTPException, Depends  # type: ignore
+from fastapi import APIRouter, HTTPException, Depends, Request as FastAPIRequest  # type: ignore
 from pydantic import BaseModel  # type: ignore
 from supabase import create_client, Client # type: ignore
 from kuratormind.api.deps import get_current_user
+from kuratormind.api.limiter import limiter
 from kuratormind.tools.supabase_tools import semantic_search # type: ignore
 
 logger = logging.getLogger(__name__)
@@ -54,8 +55,10 @@ def _get_supabase() -> Client:
 # ------------------------------------------------------------
 
 @router.post("/search", response_model=SearchResponse)
+@limiter.limit("30/minute")
 async def case_search(
-    request: SearchRequest,
+    request: FastAPIRequest,
+    search_request: SearchRequest,
     current_user: Annotated[str, Depends(get_current_user)],
 ):
     """
@@ -65,14 +68,14 @@ async def case_search(
     try:
         sb = _get_supabase()
         # Ownership check: verify case belongs to current_user
-        case = sb.table("cases").select("user_id").eq("id", request.case_id).maybe_single().execute()
+        case = sb.table("cases").select("user_id").eq("id", search_request.case_id).maybe_single().execute()
         if not case.data or case.data.get("user_id") != current_user:
             raise HTTPException(status_code=403, detail="Access denied to this case.")
 
         search_results = semantic_search(
-            case_id=request.case_id,
-            query=request.query,
-            top_k=request.top_k or 10
+            case_id=search_request.case_id,
+            query=search_request.query,
+            top_k=search_request.top_k or 10
         )
         
         if "error" in search_results:
@@ -92,7 +95,7 @@ async def case_search(
         return SearchResponse.model_validate({
             "results": results,
             "count": len(results),
-            "query": request.query,
+            "query": search_request.query,
             "fallback": search_results.get("fallback", False)
         })
         

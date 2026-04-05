@@ -26,6 +26,39 @@ USER_B_ID = "00000000-0000-0000-0000-000000000002"
 SRITEX_CASE_ID = "550e8400-e29b-41d4-a716-446655440001"
 MITRA_CASE_ID = "550e8400-e29b-41d4-a716-446655440002"
 
+def seed_users():
+    print("Ensuring test users exist...")
+    users = [
+        {
+            "id": USER_A_ID,
+            "email": "test-user-a@kuratormind.ai",
+            "password": "password123",
+            "email_confirm": True
+        },
+        {
+            "id": USER_B_ID,
+            "email": "test-user-b@kuratormind.ai",
+            "password": "password123",
+            "email_confirm": True
+        }
+    ]
+    
+    for user in users:
+        try:
+            # Use auth.admin.create_user with service role
+            supabase.auth.admin.create_user({
+                "id": user["id"],
+                "email": user["email"],
+                "password": user["password"],
+                "email_confirm": user["email_confirm"]
+            })
+            print(f" - Created user: {user['email']}")
+        except Exception as e:
+            if "already exists" in str(e).lower() or "23505" in str(e):
+                print(f" - User already exists: {user['email']}")
+            else:
+                print(f"   Error ensuring user {user['email']}: {e}")
+
 def clear_data():
     print("Clearing existing test data...")
     # Clear tables in reverse dependency order
@@ -44,21 +77,11 @@ def clear_data():
     
     for table in tables:
         try:
-            # We filter by our deterministic test cases to avoid deleting everything if not desired
-            # But the plan says "reset and seed", so we'll clear all if using a test DB
-            # For safety in shared environments, we can delete by case_id if we have it
-            # But since it's a seed script, it's usually destructive
             print(f" - Deleting from {table}...")
+            # Deleting all records for a clean state
             supabase.table(table).delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
         except Exception as e:
             print(f"   Error clearing {table}: {e}")
-
-def seed_users():
-    print("Ensuring test users exist (this may fail if not superuser, but we can proceed)...")
-    # Note: supabase-py doesn't support creating auth users easily with service role
-    # unless using auth.admin.create_user.
-    # For local tests, we assume these users exist or we just use their IDs for cases
-    pass
 
 def seed_cases():
     print("Seeding cases...")
@@ -105,6 +128,7 @@ def seed_cases():
             print(f"   Error seeding case {case['name']}: {e}")
 
 def main():
+    seed_users()
     clear_data()
     seed_cases()
     print("\nSeeding complete!")

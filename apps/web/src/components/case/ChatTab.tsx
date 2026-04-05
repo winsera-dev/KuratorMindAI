@@ -240,7 +240,7 @@ export function ChatTab({ caseId, onViewSource }: ChatTabProps) {
                       agentConfidence >= 0.5 ? 'text-amber-500' : 
                       'text-rose-500'
                     }`}>
-                      {Math.round(agentConfidence * 100)}% CONFIDENCE
+                      {Math.round(agentConfidence * 100)}% ({agentConfidence >= 0.8 ? 'HIGH' : agentConfidence >= 0.5 ? 'MEDIUM' : 'LOW'}) CONFIDENCE
                     </span>
                   </div>
                 </>

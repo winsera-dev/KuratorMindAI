@@ -204,8 +204,11 @@ function PaginatedTableSection({ list, formatCurrency, onViewEvidence }: any) {
                       style={{ width: `${(claim.confidence_score || 0) * 100}%` }}
                     />
                   </div>
-                  <span className="text-[10px] font-bold text-text-muted tabular-nums">
-                    {Math.round((claim.confidence_score || 0) * 100)}%
+                  <span className={cn("text-[10px] font-bold tabular-nums", 
+                        (claim.confidence_score || 0) > 0.8 ? "text-accent-emerald" : 
+                        (claim.confidence_score || 0) > 0.5 ? "text-accent-amber" : "text-accent-rose"
+                  )}>
+                    {Math.round((claim.confidence_score || 0) * 100)}% ({(claim.confidence_score || 0) > 0.8 ? 'HIGH' : (claim.confidence_score || 0) > 0.5 ? 'MEDIUM' : 'LOW'})
                   </span>
                 </div>
               </td>

@@ -11,9 +11,10 @@ import os
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, Request as FastAPIRequest
 from supabase import create_client, Client
 from kuratormind.api.deps import get_current_user
+from kuratormind.api.limiter import limiter
 from kuratormind.services.ingestion import ingest_document
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,9 @@ def _get_supabase() -> Client:
 
 
 @router.post("/documents/upload")
+@limiter.limit("20/minute")
 async def upload_document(
+    request: FastAPIRequest,
     background_tasks: BackgroundTasks,
     case_id: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],

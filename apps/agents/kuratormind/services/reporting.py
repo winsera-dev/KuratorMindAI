@@ -2,6 +2,7 @@ from fpdf import FPDF  # type: ignore
 from datetime import datetime
 import re
 from typing import List, Dict, Any
+from kuratormind.services.security import decrypt_pii
 
 class KuratorReport(FPDF):
     def __init__(self, case_metadata: Dict[str, Any] | None = None, *args, **kwargs):
@@ -36,7 +37,8 @@ class KuratorReport(FPDF):
         self.set_x(30)
         self.cell(0, 10, f"CASE NUMBER: {self.case_metadata.get('case_number', 'N/A')}", ln=True)
         self.set_x(30)
-        self.cell(0, 10, f"DEBTOR ENTITY: {self.case_metadata.get('debtor_entity', 'N/A')}", ln=True)
+        debtor = decrypt_pii(self.case_metadata.get('debtor_entity', 'N/A'))
+        self.cell(0, 10, f"DEBTOR ENTITY: {debtor}", ln=True)
         self.set_x(30)
         self.cell(0, 10, f"COURT JURISDICTION: {self.case_metadata.get('court_name', 'COURT OF COMMERCE')}", ln=True)
         self.set_x(30)
@@ -52,19 +54,35 @@ class KuratorReport(FPDF):
             "Forensic integrity is maintained via automated OCR confidence scoring and citation mapping. "
             "Usage of this report in Indonesian Courts is subject to UU 37/2004 and formal Kurator verification."
         )
-        self.multi_cell(0, 5, disclaimer, align='C')
+        self.multi_cell(0, 5, self._clean_text(disclaimer), align='C')
         
         # 4. Seal-like graphic (bottom right)
         self.set_y(250)
         self.set_font('helvetica', 'B', 8)
         self.set_text_color(41, 121, 255)
-        self.cell(0, 10, "[ VERIFIED FORENSIC OUTPUT / KM-AI-2026 ]", align='R')
+        self.cell(0, 10, self._clean_text("[ VERIFIED FORENSIC OUTPUT / KM-AI-2026 ]"), align='R')
+
+    def _clean_text(self, text: str) -> str:
+        """Sanitises text for FPDF to avoid Unicode encoding errors with standard fonts."""
+        replacements = {
+            '—': '-', '–': '-',
+            '‘': "'", '’': "'",
+            '“': '"', '”': '"',
+            '•': '*', '●': '*', '▪': '*', '▫': '*', '◦': '*',
+            '\u2013': '-', '\u2014': '-',
+            '\u2018': "'", '\u2019': "'",
+            '\u201c': '"', '\u201d': '"',
+            '\u2022': '*'
+        }
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        return text
 
     def header(self):
         # Header with professional branding
         self.set_font('helvetica', 'B', 12)
         self.set_text_color(41, 121, 255) # accent-blue
-        self.cell(0, 10, 'KURATORMIND AI — FORENSIC WORKSPACE', border=False, align='L')
+        self.cell(0, 10, 'KURATORMIND AI - FORENSIC WORKSPACE', border=False, align='L')
         
         self.set_font('helvetica', 'B', 9)
         self.set_text_color(150, 150, 150)
@@ -99,7 +117,7 @@ class KuratorReport(FPDF):
         self.set_x(10)
         self.cell(0, 10, 'Generated via KuratorMind Multi-Agent Swarm', align='C')
         # Right: Legal Notice
-        self.cell(0, 10, 'Strictly Confidential — Forensic Use', align='R')
+        self.cell(0, 10, self._clean_text('Strictly Confidential - Forensic Use'), align='R')
 
     def add_footnote(self, text: str):
         if text not in self.footnotes:
@@ -160,24 +178,26 @@ class KuratorReport(FPDF):
         self.ln(5)
 
 def generate_forensic_pdf(title: str, content: str, output_path: str, case_id: str | None = None):
-    """Generates a professional PDF from Markdown-style content with auto-footnoting."""
+    """
+    Main entrypoint for generating a PDF report.
+    Enriches with case metadata if available in DB.
+    """
     import os
     from supabase import create_client
     
-    # 1. Enrichment: Try to fetch case metadata for the certificate page
-    case_meta = {}
+    case_meta = None
     if case_id:
         try:
-            url = os.environ.get("SUPABASE_URL", "")
-            key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+            url = os.environ.get("SUPABASE_URL")
+            key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
             if url and key:
                 sb = create_client(url, key)
                 res = sb.table("cases").select("*").eq("id", case_id).maybe_single().execute()
                 if res.data:
                     case_meta = res.data
         except Exception as e:
-            print(f"Metadata enrichment failed: {e}")
-
+            pass
+    
     pdf = KuratorReport(case_metadata=case_meta)
     pdf.alias_nb_pages()
     pdf.set_auto_page_break(auto=True, margin=20)
@@ -192,10 +212,10 @@ def generate_forensic_pdf(title: str, content: str, output_path: str, case_id: s
     
     # Title Section
     pdf.set_font('helvetica', 'B', 20)
-    pdf.multi_cell(0, 15, title.upper(), align='L')
+    pdf.multi_cell(0, 15, pdf._clean_text(title.upper()), align='L')
     pdf.set_font('helvetica', 'I', 10)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 10, f'Formal Report — Case ID: {case_id or "N/A"}', ln=True)
+    pdf.cell(0, 10, pdf._clean_text(f'Formal Report - Case ID: {case_id or "N/A"}'), ln=True)
     pdf.ln(10)
     
     # Body Styling
@@ -230,17 +250,17 @@ def generate_forensic_pdf(title: str, content: str, output_path: str, case_id: s
         if line.startswith('# '):
             pdf.set_font('helvetica', 'B', 16)
             pdf.set_text_color(41, 121, 255)
-            pdf.multi_cell(effective_page_width, 10, line[2:])
+            pdf.multi_cell(effective_page_width, 10, pdf._clean_text(line[2:]))
             pdf.ln(2)
         elif line.startswith('## '):
             pdf.set_font('helvetica', 'B', 14)
             pdf.set_text_color(30, 30, 30)
-            pdf.multi_cell(effective_page_width, 8, line[3:])
+            pdf.multi_cell(effective_page_width, 10, pdf._clean_text(line[3:]))
             pdf.ln(1)
         elif line.startswith('### '):
             pdf.set_font('helvetica', 'B', 11)
             pdf.set_text_color(60, 60, 60)
-            pdf.multi_cell(effective_page_width, 7, line[4:])
+            pdf.multi_cell(effective_page_width, 7, pdf._clean_text(line[4:]))
         
         # Handle Lists
         elif line.startswith('- ') or line.startswith('* '):
@@ -254,7 +274,7 @@ def generate_forensic_pdf(title: str, content: str, output_path: str, case_id: s
                 note_num = pdf.add_footnote(cite[1:-1])
                 item_text = item_text.replace(cite, f" ({note_num})")
             
-            pdf.multi_cell(effective_page_width, 6, f"  • {item_text}")
+            pdf.multi_cell(effective_page_width, 6, pdf._clean_text(f"  • {item_text}"))
         
         # Standard Paragraph
         else:
@@ -262,6 +282,8 @@ def generate_forensic_pdf(title: str, content: str, output_path: str, case_id: s
             pdf.set_text_color(0, 0, 0)
             # Check for citations in text
             para_text = line
+            # Para text sanitization (Unicode mapping)
+            para_text = pdf._clean_text(line)
             citations = re.findall(r"\[Doc:.*?, Pg:.*?\]", para_text)
             for cite in citations:
                 note_num = pdf.add_footnote(cite[1:-1])
@@ -272,7 +294,7 @@ def generate_forensic_pdf(title: str, content: str, output_path: str, case_id: s
         
         i += 1
             
-    # Final phase: Render all collected footnotes on a new page
+    # Render Footer Note page if citations present
     pdf.render_footnotes()
     
     pdf.output(output_path)

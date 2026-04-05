@@ -7,19 +7,24 @@ test.describe('Case Management CRUD', () => {
     await page.goto('/dashboard');
     
     // 1. Create a case (TC-CASE-01)
-    const createBtn = page.getByRole('button', { name: /create case|new case/i });
+    const createBtn = page.getByRole('button', { name: /Initialize Workspace|new case/i });
     await expect(createBtn).toBeVisible();
     await createBtn.click();
     
-    // Fill the form (adjust based on actual UI)
+    // Fill the form (using placeholders or text as labels are not associated via 'for')
     const caseName = `E2E Test Case ${Date.now()}`;
-    await page.getByLabel('Case Name').fill(caseName);
-    await page.getByLabel('Debtor Entity').fill('E2E Test Debtor');
-    await page.getByLabel('Case Number').fill('E2E-TEST-001');
-    await page.getByLabel('Court Name').fill('E2E District Court');
-    await page.getByLabel('Bankruptcy Date').fill('2025-01-01');
+    await page.getByPlaceholder(/PT Maju Jaya Rescheduling/i).fill(caseName);
+    await page.getByPlaceholder(/Full Legal Name/i).fill('E2E Test Debtor');
+    // Valid format: [No]/Pdt.Sus-[Type]/[Year]/PN [Court]
+    await page.getByPlaceholder(/15\/Pdt\.Sus-PKPU\/2024\/PN Jkt\.Pst/i).fill('1/Pdt.Sus-PKPU/2025/PN Niaga Jkt.Pst');
+    await page.getByPlaceholder(/PN Jakarta Pusat/i).fill('PN Niaga Jakarta Pusat');
     
-    await page.getByRole('button', { name: /save|create/i }).click();
+    // Set stage and start date
+    await page.locator('select').selectOption('pkpu_temp');
+    // Start date input is type="date"
+    await page.locator('input[type="date"]').fill('2025-01-01');
+    
+    await page.getByRole('button', { name: /Create Workspace/i }).click();
     
     // Wait for the case to appear in the dashboard
     await expect(page.getByText(caseName)).toBeVisible();
@@ -30,27 +35,23 @@ test.describe('Case Management CRUD', () => {
     await expect(page.getByRole('heading', { name: caseName })).toBeVisible();
     
     // 3. Edit Case (TC-CASE-04)
-    const editBtn = page.getByRole('button', { name: /edit/i });
+    // There is likely a button to open the modal again
+    const editBtn = page.getByRole('button', { name: /Workspace Intelligence/i });
     if (await editBtn.isVisible()) {
       await editBtn.click();
       const updatedName = `${caseName} Updated`;
-      await page.getByLabel('Case Name').fill(updatedName);
-      await page.getByRole('button', { name: /save|update/i }).click();
+      await page.getByPlaceholder(/PT Maju Jaya Rescheduling/i).fill(updatedName);
+      
+      // 4. Verify stage transitions / started_at updates (TC-CASE-06)
+      await page.locator('select').selectOption('pkpu_permanent');
+      
+      // Verify stage_started_at auto-updates to today (check input value)
+      const today = new Date().toISOString().split("T")[0];
+      const startDateInput = page.locator('input[type="date"]');
+      await expect(startDateInput).toHaveValue(today);
+
+      await page.getByRole('button', { name: /Update Intelligence/i }).click();
       await expect(page.getByRole('heading', { name: updatedName })).toBeVisible();
-    }
-    
-    // 4. Verify stage transitions / started_at updates (TC-CASE-06)
-    // Assuming there's a way to change stage in the UI
-    const stageSelect = page.getByLabel(/stage/i);
-    if (await stageSelect.isVisible()) {
-        await stageSelect.selectOption('pkpu_permanent');
-        // Might need a save button if not auto-saving
-        const saveBtn = page.getByRole('button', { name: /save/i });
-        if (await saveBtn.isVisible()) await saveBtn.click();
-        
-        // stage_started_at is updated in the background
-        // but we might check if a 'Last Updated' timestamp is visible
-        // await expect(page.getByText(/Updated just now|Updated/i)).toBeVisible();
     }
   });
 

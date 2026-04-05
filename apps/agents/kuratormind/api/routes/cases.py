@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
 from kuratormind.api.deps import get_current_user
+from kuratormind.services.security import encrypt_pii, decrypt_pii
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -79,6 +80,7 @@ async def list_cases(
     auth_enabled = os.environ.get("AUTH_ENABLED", "false").lower() == "true"
     
     try:
+        sb = _get_supabase()
         query = sb.table("cases").select("*")
         
         if not auth_enabled:
@@ -88,7 +90,11 @@ async def list_cases(
             query = query.eq("user_id", current_user)
             
         result = query.order("updated_at", desc=True).execute()
-        return {"cases": result.data, "count": len(result.data)}
+        cases = result.data or []
+        for c in cases:
+            c["debtor_entity"] = decrypt_pii(c.get("debtor_entity"))
+            
+        return {"cases": cases, "count": len(cases)}
     except Exception as exc:
         logger.error("List cases failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
@@ -104,6 +110,10 @@ async def create_case(
     case_data = case.dict()
     # Always override user_id with the authenticated user — never trust client-supplied value
     case_data["user_id"] = current_user
+
+    # 2. Encrypt PII
+    if case_data.get("debtor_entity"):
+        case_data["debtor_entity"] = encrypt_pii(case_data["debtor_entity"])
 
     # Pydantic date to string for JSON serialization
     if case_data.get("stage_started_at"):
@@ -131,7 +141,10 @@ async def create_case(
         result = sb.table("cases").insert(case_data).execute()
         if not result.data:
             raise HTTPException(status_code=500, detail="Failed to create case record.")
-        return result.data[0]
+        
+        created_case = result.data[0]
+        created_case["debtor_entity"] = decrypt_pii(created_case.get("debtor_entity"))
+        return created_case
     except HTTPException:
         raise
     except Exception as exc:
@@ -178,6 +191,10 @@ async def update_case(
     
     from datetime import datetime
     
+    # 1. Encrypt PII if provided
+    if "debtor_entity" in updates:
+        updates["debtor_entity"] = encrypt_pii(updates["debtor_entity"])
+
     # Auto-enforcement: if stage is being changed, update stage_started_at
     if "stage" in updates and "stage_started_at" not in updates:
         updates["stage_started_at"] = datetime.utcnow().isoformat()
@@ -221,7 +238,9 @@ async def update_case(
             logger.error(f"Case {case_id} not found during update")
             raise HTTPException(status_code=404, detail="Case not found")
             
-        return result.data[0]
+        updated_case = result.data[0]
+        updated_case["debtor_entity"] = decrypt_pii(updated_case.get("debtor_entity"))
+        return updated_case
     except HTTPException:
         raise
     except Exception as exc:
@@ -260,6 +279,7 @@ async def get_case(
     auth_enabled = os.environ.get("AUTH_ENABLED", "false").lower() == "true"
     
     try:
+        sb = _get_supabase()
         query = sb.table("cases").select("*").eq("id", case_id)
         
         if not auth_enabled:
@@ -272,7 +292,10 @@ async def get_case(
         
         if not result.data or len(result.data) == 0:
             raise HTTPException(status_code=404, detail="Case not found")
-        return result.data[0]
+        
+        found_case = result.data[0]
+        found_case["debtor_entity"] = decrypt_pii(found_case.get("debtor_entity"))
+        return found_case
     except HTTPException:
         raise
     except Exception as exc:

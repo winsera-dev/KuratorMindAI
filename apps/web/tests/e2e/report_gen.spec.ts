@@ -5,38 +5,35 @@ test.describe('Report Generation & UX Polish', () => {
   
   test('TC-RPT-01 to 05: Should trigger report, view progress, and download PDF', async ({ page }) => {
     await page.goto('/dashboard');
-    await page.getByRole('link', { name: /Sritex/i }).first().click();
+    await page.getByText(/Sritex/i).first().click();
     
-    // Find 'Reports' tab/link
-    const reportsTab = page.getByRole('tab', { name: /Reports/i });
-    if (await reportsTab.isVisible()) {
-      await reportsTab.click();
-      
-      const generateBtn = page.getByRole('button', { name: /generate report|new report/i });
-      await expect(generateBtn).toBeVisible();
-      await generateBtn.click();
-      
-      // Select template
-      const templateSelect = page.getByLabel(/template/i);
-      if (await templateSelect.isVisible()) await templateSelect.selectOption('draft_v1');
-      
-      await page.getByRole('button', { name: /start/i }).click();
-      
-      // Verify progress state (Module 8)
-      // Progress indicators: 'Orchestrating agents...', 'Drafting section...'
-      await expect(page.getByText(/In Progress|Generating|Drafting/i)).toBeVisible();
-      
-      // Wait for completion (might take time in a real app, but mocks should be fast)
-      const downloadBtn = page.getByRole('button', { name: /download pdf/i });
-      await expect(downloadBtn).toBeVisible({ timeout: 60000 });
-      
-      // Trigger and intercept download (optional but good for E2E)
-      const [ download ] = await Promise.all([
-        page.waitForEvent('download'),
-        downloadBtn.click(),
-      ]);
-      await expect(download.suggestedFilename()).toMatch(/.*\.pdf/);
-    }
+    // Find 'Reports' tab/link (Outputs in the UI)
+    const reportsTab = page.getByRole('button', { name: /Reports|Outputs/i });
+    await expect(reportsTab).toBeVisible();
+    await reportsTab.click();
+    
+    // Find a 'New Document' button in one of the templates
+    const generateBtn = page.getByRole('button', { name: /New Document/i }).first();
+    await expect(generateBtn).toBeVisible();
+    await generateBtn.click();
+    
+    // Verify progress state (Module 8)
+    // Progress indicators: 'Generating...', status messages
+    await expect(page.getByText(/Generating/i)).toBeVisible();
+    // Wait for architect status
+    await expect(page.locator('span').filter({ hasText: /Architect|Thinking|Drafting/i })).toBeVisible();
+    
+    // Wait for completion (refresh results in list)
+    // The list should show the new report
+    const downloadBtn = page.getByRole('button', { name: /Download PDF/i });
+    await expect(downloadBtn.first()).toBeVisible({ timeout: 60000 });
+    
+    // Trigger and intercept download
+    const [ download ] = await Promise.all([
+      page.waitForEvent('download'),
+      downloadBtn.first().click(),
+    ]);
+    await expect(download.suggestedFilename()).toMatch(/.*\.pdf/);
   });
 
   test('TC-DASH-06: Should handle 3G throttling gracefully', async ({ page, context }) => {

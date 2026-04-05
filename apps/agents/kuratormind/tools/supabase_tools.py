@@ -10,6 +10,7 @@ import json
 from typing import Optional
 from google.adk.tools import FunctionTool # type: ignore
 from supabase import create_client, Client # type: ignore
+from kuratormind.services.security import encrypt_pii, decrypt_pii
 
 # Initialize Supabase client
 _supabase: Optional[Client] = None
@@ -204,8 +205,8 @@ def upsert_claim_record(
         
         data = {
             "case_id": case_id,
-            "creditor_name": creditor_name,
-            "creditor_aliases": creditor_aliases or [],
+            "creditor_name": encrypt_pii(creditor_name),
+            "creditor_aliases": [encrypt_pii(a) for a in (creditor_aliases or [])],
             "claim_amount": claim_amount,
             "claim_type": claim_type,
             "collateral_description": collateral_description,
@@ -218,8 +219,8 @@ def upsert_claim_record(
         if source_document_id:
             data["metadata"]["source_document_id"] = source_document_id
         
-        # Check if exists
-        query = sb.table("claims").select("id").eq("case_id", case_id).eq("creditor_name", creditor_name).execute()
+        # Check if exists (Search by encrypted name)
+        query = sb.table("claims").select("id").eq("case_id", case_id).eq("creditor_name", encrypt_pii(creditor_name)).execute()
         existing_data = query.data
         
         if existing_data and len(existing_data) > 0:
@@ -227,7 +228,13 @@ def upsert_claim_record(
         else:
             result = sb.table("claims").insert(data).execute()
             
-        return {"claim": result.data[0] if result.data else None, "error": None}
+        if result.data and len(result.data) > 0:
+            claim = result.data[0]
+            claim["creditor_name"] = decrypt_pii(claim.get("creditor_name"))
+            claim["creditor_aliases"] = [decrypt_pii(a) for a in claim.get("creditor_aliases", [])]
+            return {"claim": claim, "error": None}
+            
+        return {"claim": None, "error": None}
     except Exception as e:
         return {"error": str(e), "claim": None}
 
@@ -454,8 +461,12 @@ def get_case_consolidated_findings(case_id: str) -> dict:
         # 2. Audit Flags
         flags = sb.table("audit_flags").select("*").eq("case_id", case_id).execute()
         
-        # 3. Claims
-        claims = sb.table("claims").select("*").eq("case_id", case_id).execute()
+        # 3. Claims (Decrypt PII)
+        claims_res = sb.table("claims").select("*").eq("case_id", case_id).execute()
+        claims = claims_res.data or []
+        for c in claims:
+            c["creditor_name"] = decrypt_pii(c.get("creditor_name"))
+            c["creditor_aliases"] = [decrypt_pii(a) for a in c.get("creditor_aliases", [])]
 
         # 4. Global Overlaps (from Phase 1D)
         # Find all entities in this case that exist in others
