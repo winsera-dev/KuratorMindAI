@@ -2,17 +2,19 @@
 KuratorMind AI — Cases API Route
 
 Handles forensic case (case) lifecycle management.
+All routes are protected by Supabase JWT authentication.
 """
 
 import logging
 import os
 import uuid
 from datetime import date
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
+from kuratormind.api.deps import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -70,31 +72,42 @@ def _get_supabase() -> Client:
 # ------------------------------------------------------------
 
 @router.get("/cases", response_model=dict)
-async def list_cases(user_id: Optional[str] = Query(None)):
-    """List all cases for a specific user."""
+async def list_cases(
+    current_user: Annotated[str, Depends(get_current_user)],
+):
+    """List all cases for the authenticated user."""
     sb = _get_supabase()
-    query = sb.table("cases").select("*")
-    
-    if user_id:
-        query = query.eq("user_id", user_id)
-    
     try:
-        result = query.order("updated_at", desc=True).execute()
+        result = (
+            sb.table("cases")
+            .select("*")
+            .eq("user_id", current_user)
+            .order("updated_at", desc=True)
+            .execute()
+        )
         return {"cases": result.data, "count": len(result.data)}
     except Exception as exc:
         logger.error("List cases failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
 
 @router.post("/cases", response_model=CaseResponse)
-async def create_case(case: CaseCreate):
-    """Create a new forensic case."""
+async def create_case(
+    case: CaseCreate,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
+    """Create a new forensic case. user_id is always derived from the verified JWT."""
     sb = _get_supabase()
-    
+
     case_data = case.dict()
+    # Always override user_id with the authenticated user — never trust client-supplied value
+    case_data["user_id"] = current_user
+
     # Pydantic date to string for JSON serialization
     if case_data.get("stage_started_at"):
-        case_data["stage_started_at"] = case_data["stage_started_at"].isoformat()
-        
+        val = case_data["stage_started_at"]
+        if hasattr(val, "isoformat"):
+            case_data["stage_started_at"] = val.isoformat()
+
     try:
         result = sb.table("cases").insert(case_data).execute()
         if not result.data:
@@ -105,7 +118,10 @@ async def create_case(case: CaseCreate):
         raise HTTPException(status_code=500, detail=str(exc))
 
 @router.get("/cases/{case_id}/stats", response_model=CaseStats)
-async def get_case_stats(case_id: str):
+async def get_case_stats(
+    case_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
     """Get aggregated metrics for a specific case."""
     sb = _get_supabase()
     try:
@@ -130,9 +146,19 @@ async def get_case_stats(case_id: str):
         logger.error("Get case stats failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
 @router.patch("/cases/{case_id}", response_model=CaseResponse)
-async def update_case(case_id: str, updates: dict):
+async def update_case(
+    case_id: str,
+    updates: dict,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
     """Update case metadata (e.g. stage transition)."""
     sb = _get_supabase()
+    
+    from datetime import datetime
+    
+    # Auto-enforcement: if stage is being changed, update stage_started_at
+    if "stage" in updates and "stage_started_at" not in updates:
+        updates["stage_started_at"] = datetime.utcnow().isoformat()
     
     # Handle date serialization if present in updates
     # Ensure they are valid ISO strings for Postgres
@@ -161,7 +187,10 @@ async def update_case(case_id: str, updates: dict):
         raise HTTPException(status_code=500, detail=err_msg)
 
 @router.post("/cases/sync-regulations", response_model=dict)
-async def trigger_regulation_sync(request: SyncRequest):
+async def trigger_regulation_sync(
+    request: SyncRequest,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
     """Trigger the Regulatory Scholar's grounding sync process."""
     from kuratormind.tools.supabase_tools import sync_legal_knowledge
     
@@ -177,12 +206,20 @@ async def trigger_regulation_sync(request: SyncRequest):
         raise HTTPException(status_code=500, detail=str(exc))
 
 @router.get("/cases/{case_id}", response_model=CaseResponse)
-async def get_case(case_id: str):
-    """Fetch a single forensic case by ID."""
+async def get_case(
+    case_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
+    """Fetch a single forensic case — only if it belongs to the authenticated user."""
     sb = _get_supabase()
     try:
-        # Use simple select and check data length to avoid maybe_single() version issues
-        result = sb.table("cases").select("*").eq("id", case_id).execute()
+        result = (
+            sb.table("cases")
+            .select("*")
+            .eq("id", case_id)
+            .eq("user_id", current_user)  # ownership check
+            .execute()
+        )
         if not result.data or len(result.data) == 0:
             raise HTTPException(status_code=404, detail="Case not found")
         return result.data[0]

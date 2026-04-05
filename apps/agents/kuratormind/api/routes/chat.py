@@ -3,6 +3,7 @@ KuratorMind AI — Chat API Route
 
 SSE streaming chat endpoint connected to the Lead Orchestrator agent.
 Persists all messages (user + assistant) to Supabase for history.
+All routes are protected by Supabase JWT authentication.
 """
 
 from __future__ import annotations
@@ -11,19 +12,23 @@ import json
 import logging
 import os
 import uuid
-from typing import Any, AsyncGenerator, cast
+from typing import Any, AsyncGenerator, Annotated, cast
 
-from fastapi import APIRouter, HTTPException  # type: ignore
+from fastapi import APIRouter, Depends, HTTPException  # type: ignore
 from pydantic import BaseModel  # type: ignore
 from sse_starlette.sse import EventSourceResponse  # type: ignore
 from google import genai  # type: ignore
 from supabase import create_client  # type: ignore
+from kuratormind.api.deps import get_current_user
 from kuratormind.tools.supabase_tools import (
     semantic_search,
     get_case_consolidated_findings,
     create_audit_flag,
 )
 from kuratormind.agents.output_architect.agent import generate_and_save_report
+from kuratormind.agents.claim_auditor.agent import CLAIM_AUDITOR_INSTRUCTION
+from kuratormind.agents.forensic_accountant.agent import FORENSIC_ACCOUNTANT_INSTRUCTION
+from kuratormind.agents.regulatory_scholar.agent import REGULATORY_SCHOLAR_INSTRUCTION
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -205,12 +210,60 @@ When case documents are provided below, ground ALL answers in those documents. A
 
 
 # ---------------------------------------------------------------------------
-# Streaming endpoint
+# Agent Router
 # ---------------------------------------------------------------------------
+
+# Keywords for intent-based routing. Checked case-insensitively.
+_CLAIM_AUDITOR_KEYWORDS = [
+    "klaim", "piutang", "kreditor", "creditor", "claim", "utang",
+    "tagihan", "separatis", "konkuren", "preferen", "akta", "surat tagihan",
+]
+_REGULATORY_KEYWORDS = [
+    "pasal", "uu ", "pkpu", "hukum", "peraturan", "ojk", "mahkamah",
+    "undang-undang", "regulation", "legal", "law", "article",
+]
+_ACCOUNTANT_KEYWORDS = [
+    "laporan keuangan", "psak", "balance sheet", "neraca", "ifrs",
+    "rasio", "ratio", "aset", "liabilitas", "ekuitas", "finansial",
+    "laba", "rugi", "arus kas", "cash flow",
+]
+
+
+def _route_to_agent(
+    message: str,
+    agent_override: str | None,
+) -> tuple[str, str]:
+    """
+    Determines which specialist agent system prompt to use.
+
+    Returns:
+        (agent_name, system_prompt)
+    """
+    if agent_override == "output_architect":
+        from kuratormind.agents.output_architect.agent import OUTPUT_ARCHITECT_INSTRUCTION
+        return "output_architect", OUTPUT_ARCHITECT_INSTRUCTION
+
+    lower = message.lower()
+
+    if any(kw in lower for kw in _CLAIM_AUDITOR_KEYWORDS):
+        return "claim_auditor", CLAIM_AUDITOR_INSTRUCTION
+
+    if any(kw in lower for kw in _REGULATORY_KEYWORDS):
+        return "regulatory_scholar", REGULATORY_SCHOLAR_INSTRUCTION
+
+    if any(kw in lower for kw in _ACCOUNTANT_KEYWORDS):
+        return "forensic_accountant", FORENSIC_ACCOUNTANT_INSTRUCTION
+
+    # Default: Lead Orchestrator
+    return "lead_orchestrator", SYSTEM_PROMPT_BASE
+
 
 
 @router.post("/chat")
-async def chat(request: ChatRequest):
+async def chat(
+    request: ChatRequest,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
     """
     Send a message and receive a Server-Sent Events (SSE) stream.
 
@@ -230,8 +283,10 @@ async def chat(request: ChatRequest):
 
         try:
             # 1. Upsert session + save user message
+            # user_id always comes from the verified JWT, not request body
+            resolved_user_id = current_user
             if sb:
-                _upsert_session(sb, session_id, request.case_id, request.user_id)
+                _upsert_session(sb, session_id, request.case_id, resolved_user_id)
                 _save_message(
                     sb,
                     session_id=session_id,
@@ -240,19 +295,44 @@ async def chat(request: ChatRequest):
                     content=request.message,
                 )
 
-            # 2. Signal start
+            # 2. Signal start — show which agent is being routed
+            agent_name, system_prompt_for_agent = _route_to_agent(
+                request.message, request.agent_override
+            )
+
             yield {
                 "event": "agent_status",
                 "data": json.dumps(
                     {
-                        "agent": "lead_orchestrator",
+                        "agent": agent_name,
                         "status": "working",
                         "message": "Searching case context…",
                     }
                 ),
             }
 
-            # 3. Fetch case document context (RAG)
+            # 3. GUARD: For output_architect, block if no documents are ingested
+            if request.agent_override == "output_architect" and sb:
+                doc_check = (
+                    sb.table("case_documents")
+                    .select("id", count="exact")
+                    .eq("case_id", request.case_id)
+                    .eq("status", "ready")
+                    .execute()
+                )
+                doc_count = doc_check.count if doc_check.count is not None else 0
+                if doc_count == 0:
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({
+                            "error": "No indexed documents found for this case. "
+                                     "Please upload and wait for at least one document to finish ingesting "
+                                     "before generating a report."
+                        }),
+                    }
+                    return
+
+            # 4. Fetch case document context (RAG)
             case_context, retrieved_chunks = "", []
             if sb:
                 case_context, retrieved_chunks = _fetch_case_context(sb, request.case_id, request.message)
@@ -262,14 +342,13 @@ async def chat(request: ChatRequest):
             if sb:
                 history = _get_chat_history(sb, session_id)
 
-            # 5. Assemble system prompt
+            # 5. Assemble system prompt using the routed agent
             if request.agent_override == "output_architect":
-                from kuratormind.agents.output_architect.agent import OUTPUT_ARCHITECT_INSTRUCTION
-                system_prompt = OUTPUT_ARCHITECT_INSTRUCTION
+                system_prompt = system_prompt_for_agent
                 if case_context:
                     system_prompt += f"\n\n## Data Context for Report Extraction\n{case_context}"
             else:
-                system_prompt = SYSTEM_PROMPT_BASE
+                system_prompt = system_prompt_for_agent
                 if case_context:
                     system_prompt += f"\n\n{case_context}"
 
@@ -295,7 +374,7 @@ async def chat(request: ChatRequest):
                 "event": "agent_status",
                 "data": json.dumps(
                     {
-                        "agent": "lead_orchestrator",
+                        "agent": agent_name,
                         "status": "generating",
                         "message": "Generating forensic analysis…",
                     }
@@ -478,7 +557,7 @@ async def chat(request: ChatRequest):
                     case_id=request.case_id,
                     role="assistant",
                     content=full_text,
-                    agent_name=request.agent_override or "lead_orchestrator",
+                    agent_name=agent_name,
                     citations=citations
                 )
 
@@ -488,7 +567,7 @@ async def chat(request: ChatRequest):
                 "data": json.dumps(
                     {
                         "content": full_text,
-                        "agent_name": "lead_orchestrator",
+                        "agent_name": agent_name,
                         "citations": citations,
                     }
                 ),
@@ -551,7 +630,10 @@ async def chat_sync(request: ChatRequest) -> ChatResponse:
 
 
 @router.get("/chat/history/{session_id}")
-async def get_chat_history(session_id: str):
+async def get_chat_history(
+    session_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
     """Retrieve the full message history for a chat session."""
     sb = _get_supabase()
     if not sb:

@@ -32,9 +32,10 @@ const formatDate = (dateStr: string) => {
 
 interface OutputsTabProps {
   caseId: string;
+  documentCount?: number;
 }
 
-export function OutputsTab({ caseId }: OutputsTabProps) {
+export function OutputsTab({ caseId, documentCount = 0 }: OutputsTabProps) {
   const [outputs, setOutputs] = useState<GeneratedOutput[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
@@ -59,6 +60,7 @@ export function OutputsTab({ caseId }: OutputsTabProps) {
   }, [fetchData]);
 
   const handleGenerate = async (type: OutputType, title: string) => {
+    if (documentCount === 0) return; // guard: no documents
     setGenerating(type);
     try {
       await generateReport(caseId, type, title);
@@ -138,28 +140,35 @@ export function OutputsTab({ caseId }: OutputsTabProps) {
                 </div>
               </div>
               
-              <button 
-                onClick={() => handleGenerate(tpl.id as OutputType, tpl.title)}
-                disabled={generating !== null}
-                className={cn(
-                  "mt-6 w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
-                  generating === tpl.id 
-                    ? "bg-secondary text-text-muted cursor-not-allowed" 
-                    : "bg-text-secondary text-white hover:bg-text-primary shadow-lg shadow-black/5"
-                )}
-              >
-                {generating === tpl.id ? (
-                  <>
-                    <RotateCw size={14} className="animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Plus size={14} />
-                    New Document
-                  </>
-                )}
-              </button>
+              {documentCount === 0 ? (
+                <div className="mt-6 w-full py-3 rounded-xl bg-secondary/50 border border-border-default text-[10px] font-black uppercase tracking-widest text-text-muted flex items-center justify-center gap-2 cursor-not-allowed">
+                  <AlertCircle size={12} />
+                  No Documents Uploaded
+                </div>
+              ) : (
+                <button 
+                  onClick={() => handleGenerate(tpl.id as OutputType, tpl.title)}
+                  disabled={generating !== null}
+                  className={cn(
+                    "mt-6 w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                    generating === tpl.id 
+                      ? "bg-secondary text-text-muted cursor-not-allowed" 
+                      : "bg-text-secondary text-white hover:bg-text-primary shadow-lg shadow-black/5"
+                  )}
+                >
+                  {generating === tpl.id ? (
+                    <>
+                      <RotateCw size={14} className="animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={14} />
+                      New Document
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           ))}
         </div>

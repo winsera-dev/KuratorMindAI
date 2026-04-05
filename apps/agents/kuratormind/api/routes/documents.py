@@ -3,6 +3,7 @@ KuratorMind AI — Documents API Route
 
 Handles file upload to Supabase Storage and document record management.
 Triggers background ingestion after a successful upload.
+All routes are protected by Supabase JWT authentication.
 """
 
 import logging
@@ -10,9 +11,9 @@ import os
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from supabase import create_client, Client
-
+from kuratormind.api.deps import get_current_user
 from kuratormind.services.ingestion import ingest_document
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     case_id: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
+    current_user: Annotated[str, Depends(get_current_user)],
 ):
     """
     Upload a document to a case.
@@ -136,7 +138,10 @@ async def upload_document(
 
 
 @router.get("/documents/{case_id}")
-async def list_documents(case_id: str):
+async def list_documents(
+    case_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
     """
     List all documents in a case, ordered by upload date.
     
@@ -148,6 +153,11 @@ async def list_documents(case_id: str):
     """
     sb = _get_supabase()
     try:
+        # Ownership check: verify case belongs to current_user
+        case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+        if not case.data or case.data.get("user_id") != current_user:
+            raise HTTPException(status_code=403, detail="Access denied to this case.")
+
         result = (
             sb.table("case_documents")
             .select(
@@ -165,20 +175,28 @@ async def list_documents(case_id: str):
 
 
 @router.delete("/documents/{document_id}")
-async def delete_document(document_id: str):
-    """Delete a document and all its chunks from the case."""
+async def delete_document(
+    document_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
+    """Delete a document and all its chunks from the case. Requires ownership."""
     sb = _get_supabase()
     try:
-        # Fetch the document first for storage path
+        # Fetch the document and verify ownership via the parent case
         doc = (
             sb.table("case_documents")
-            .select("file_path, case_id")
+            .select("file_path, case_id, cases(user_id)")
             .eq("id", document_id)
             .single()
             .execute()
         )
         if not doc.data:
             raise HTTPException(status_code=404, detail="Document not found.")
+
+        # Ownership check: the parent case must belong to the requesting user
+        case_owner = (doc.data.get("cases") or {}).get("user_id")
+        if case_owner and case_owner != current_user:
+            raise HTTPException(status_code=403, detail="Access denied.")
 
         storage_path = doc.data.get("file_path")
         case_id = doc.data.get("case_id")
@@ -230,7 +248,11 @@ async def delete_document(document_id: str):
         logger.error("Delete document failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
 @router.get("/documents/{document_id}/signed-url")
-async def get_document_signed_url(document_id: str, expires_in: int = 3600):
+async def get_document_signed_url(
+    document_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+    expires_in: int = 3600,
+):
     """
     Generate a signed URL for a document.
     Defaults to 1 hour expiration.

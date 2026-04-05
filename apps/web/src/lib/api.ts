@@ -33,6 +33,20 @@ const BASE_URL =
   process.env.NEXT_PUBLIC_AGENT_API_URL || 
   "http://localhost:8000";
 
+/**
+ * Returns the Authorization header for the current Supabase session.
+ * Must be called from client-side code only.
+ */
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  if (!token) return { "Content-Type": "application/json" };
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 // Response Types
 export interface UploadResponse {
   message: string;
@@ -84,7 +98,8 @@ export interface StreamEvent {
  * Fetch all cases for the current authenticated user.
  */
 export async function getCases(): Promise<Case[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/cases`);
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/api/v1/cases`, { headers });
   if (!res.ok) throw new Error("Failed to fetch cases");
   const data = await res.json();
   return data.cases;
@@ -94,7 +109,8 @@ export async function getCases(): Promise<Case[]> {
  * Fetch a single case by ID.
  */
 export async function getCase(caseId: string): Promise<Case> {
-  const res = await fetch(`${BASE_URL}/api/v1/cases/${caseId}`);
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/api/v1/cases/${caseId}`, { headers });
   if (!res.ok) throw new Error("Failed to fetch case");
   return res.json();
 }
@@ -103,9 +119,10 @@ export async function getCase(caseId: string): Promise<Case> {
  * Create a new forensic case.
  */
 export async function createCase(caseData: Partial<Case>): Promise<Case> {
+  const headers = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/api/v1/cases`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(caseData),
   });
   if (!res.ok) throw new Error("Failed to create case");
@@ -118,9 +135,10 @@ export async function updateCase(
   caseId: string,
   updates: Partial<Case>
 ): Promise<Case> {
+  const headers = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/api/v1/cases/${caseId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(updates),
   });
   if (!res.ok) throw new Error("Failed to update case");
@@ -135,7 +153,8 @@ export async function getCaseStats(caseId: string): Promise<{
   total_claims_idr: number;
   flag_count: number;
 }> {
-  const res = await fetch(`${BASE_URL}/api/v1/cases/${caseId}/stats`);
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/api/v1/cases/${caseId}/stats`, { headers });
   if (!res.ok) throw new Error("Failed to fetch case stats");
   return res.json();
 }
@@ -156,8 +175,16 @@ export async function uploadDocument(
   form.append("case_id", caseId);
   form.append("file", file);
 
+  // For multipart/form-data we must NOT set Content-Type manually (browser sets boundary)
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  const authHeaders: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
+
   const res = await fetch(`${BASE_URL}/api/v1/documents/upload`, {
     method: "POST",
+    headers: authHeaders,
     body: form,
   });
 
@@ -175,7 +202,8 @@ export async function uploadDocument(
 export async function getDocuments(
   caseId: string,
 ): Promise<DocumentsResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/documents/${caseId}`);
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/api/v1/documents/${caseId}`, { headers });
   if (!res.ok) throw new Error("Failed to fetch documents");
   return res.json() as Promise<DocumentsResponse>;
 }
@@ -184,8 +212,10 @@ export async function getDocuments(
  * Delete a document and all its indexed chunks.
  */
 export async function deleteDocument(documentId: string): Promise<void> {
+  const headers = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/api/v1/documents/${documentId}`, {
     method: "DELETE",
+    headers,
   });
   if (!res.ok) throw new Error("Failed to delete document");
 }
@@ -198,7 +228,8 @@ export async function getDocumentSignedUrl(documentId: string): Promise<{
   file_name: string;
   file_type: string;
 }> {
-  const res = await fetch(`${BASE_URL}/api/v1/documents/${documentId}/signed-url`);
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/api/v1/documents/${documentId}/signed-url`, { headers });
   if (!res.ok) {
     throw new Error(`Failed to get signed URL: ${res.statusText}`);
   }
@@ -216,7 +247,8 @@ export async function getClaims(caseId: string): Promise<{
   claims: Claim[];
   count: number;
 }> {
-  const res = await fetch(`${BASE_URL}/api/v1/claims/${caseId}`);
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/api/v1/claims/${caseId}`, { headers });
   if (!res.ok) throw new Error("Failed to fetch claims");
   return res.json();
 }
@@ -228,11 +260,13 @@ export async function updateClaim(
   claimId: string,
   updates: Partial<Claim>,
 ): Promise<Claim> {
+  const headers = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/api/v1/claims/${claimId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(updates),
   });
+  if (!res.ok) throw new Error("Failed to update claim");
   return res.json();
 }
 
@@ -244,6 +278,7 @@ export async function getAuditFlags(
   severity?: string, 
   resolved?: boolean
 ): Promise<{ flags: any[]; count: number }> {
+  const headers = await getAuthHeaders();
   const params = new URLSearchParams();
   if (severity) params.append("severity", severity);
   if (resolved !== undefined) params.append("resolved", String(resolved));
@@ -251,7 +286,7 @@ export async function getAuditFlags(
   const url = `${BASE_URL}/api/v1/audit/flags/${caseId}?${params.toString()}`;
   console.log(`[Forensic Agent] Fetching flags: ${url}`);
   
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   console.log(`[Forensic Agent] Status: ${res.status} ${res.statusText}`);
   
   if (!res.ok) {
@@ -269,9 +304,10 @@ export async function updateAuditFlag(
   flagId: string, 
   updates: { resolved?: boolean; resolution?: string }
 ): Promise<any> {
+  const headers = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/api/v1/audit/flags/${flagId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(updates),
   });
   if (!res.ok) throw new Error("Failed to update audit flag");
@@ -290,9 +326,10 @@ export async function searchCase(
   query: string, 
   topK: number = 10
 ): Promise<SearchResponse> {
+  const headers = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/api/v1/search`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ case_id: caseId, query, top_k: topK }),
   });
   
@@ -309,9 +346,10 @@ export async function searchCase(
  * Searches the Global Legal & PSAK Case (ID: 0000...)
  */
 export async function searchRegulations(query: string): Promise<SearchResponse> {
+  const headers = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/api/v1/search`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ 
       case_id: "00000000-0000-0000-0000-000000000000", 
       query, 
@@ -336,9 +374,10 @@ export async function generateForensicReport(caseId: string): Promise<{
     message: string;
     status: string;
 }> {
+    const headers = await getAuthHeaders();
     const res = await fetch(`${BASE_URL}/api/v1/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
             case_id: caseId,
             message: "Generate a consolidated Forensic Audit Report for this case. Summarize all findings, claims, and financial anomalies.",
@@ -383,9 +422,10 @@ export async function generateReport(
   type: string,
   title: string
 ): Promise<{ success: boolean; message: string }> {
+  const headers = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/api/v1/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       case_id: caseId,
       message: `Generate a professional ${type} with the title '${title}'. Consolidate all forensic findings, claims, and financial anomalies.`,
@@ -425,7 +465,7 @@ export async function waitForReport(
       .eq("output_type", type)
       .order("created_at", { ascending: false })
       .limit(1)
-      .maybe_single();
+      .maybeSingle();
 
     if (error) throw error;
 
@@ -476,9 +516,10 @@ export async function streamChat(
     onError?: (error: string) => void;
   },
 ): Promise<void> {
+  const headers = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/api/v1/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(request),
   });
 
@@ -530,7 +571,8 @@ export async function streamChat(
 export async function getChatHistory(
   sessionId: string,
 ): Promise<ChatHistoryResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/chat/history/${sessionId}`);
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/api/v1/chat/history/${sessionId}`, { headers });
   if (!res.ok) throw new Error("Failed to fetch chat history");
   return res.json() as Promise<ChatHistoryResponse>;
 }
@@ -562,30 +604,69 @@ export async function checkHealth(): Promise<boolean> {
 
 export async function getGlobalConflicts(caseId: string): Promise<{
   conflicts: AuditFlag[];
-  entities: GlobalEntity[];
+  entities: any[];
 }> {
-  // 1. Fetch conflict flags
+  // 1. Fetch conflict flags (Systemic Risks)
   const { data: flags, error: flagErr } = await supabase
     .from("audit_flags")
     .select("*")
-    .or("flag_type.eq.conflict_of_interest,flag_type.eq.entity_duplicate")
+    .or("flag_type.eq.contradiction,flag_type.eq.entity_duplicate,flag_type.eq.inflated_claim")
     .eq("case_id", caseId);
 
   if (flagErr) throw flagErr;
 
-  // 2. Fetch global occurrences for this case
-  const { data: occurrences, error: occErr } = await supabase
+  // 2. Fetch entities found in THIS case
+  const { data: localOccurrences, error: occErr } = await supabase
     .from("entity_occurrences")
     .select(`
-      *,
+      entity_id,
       global_entities (*)
     `)
     .eq("case_id", caseId);
 
   if (occErr) throw occErr;
 
+  if (!localOccurrences || localOccurrences.length === 0) {
+    return { conflicts: (flags as AuditFlag[]) || [], entities: [] };
+  }
+
+  // 3. For each entity, fetch ALL its occurrences to see other cases
+  const entityIds = localOccurrences.map(o => o.entity_id);
+  const { data: allOccurrences, error: allOccErr } = await supabase
+    .from("entity_occurrences")
+    .select(`
+      entity_id,
+      case_id,
+      source_type,
+      cases (name)
+    `)
+    .in("entity_id", entityIds);
+
+  if (allOccErr) throw allOccErr;
+
+  // 4. Map everything together
+  const enrichedEntities = localOccurrences.map(local => {
+    const entity = local.global_entities as any;
+    const occurrences = allOccurrences
+      .filter(o => o.entity_id === local.entity_id)
+      .map(o => ({
+        case_id: o.case_id,
+        case_name: (o.cases as any)?.name,
+        source_type: o.source_type
+      }));
+    
+    return {
+      ...entity,
+      occurrences,
+      occurrence_count: occurrences.length
+    };
+  });
+
+  // Filter only those that appear in multiple cases (actual overlaps)
+  const overlappingEntities = enrichedEntities.filter(e => e.occurrence_count > 1);
+
   return {
     conflicts: (flags as AuditFlag[]) || [],
-    entities: (occurrences?.map((o: any) => o.global_entities) as GlobalEntity[]) || []
+    entities: overlappingEntities
   };
 }

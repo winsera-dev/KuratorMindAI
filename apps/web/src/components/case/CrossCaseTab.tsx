@@ -151,33 +151,57 @@ export function CrossCaseTab({ caseId, onViewEvidence }: CrossCaseTabProps) {
               <Users size={14} />
               Entity Overlap ({data.entities.length})
             </h3>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {data.entities.length === 0 ? (
-                <p className="text-sm text-text-muted italic px-2">No overlapping entities found.</p>
+                <div className="p-6 rounded-xl bg-secondary/30 border border-border-subtle text-center">
+                   <Users size={24} className="mx-auto text-text-muted mb-2 opacity-20" />
+                   <p className="text-xs text-text-muted italic">No overlapping entities found.</p>
+                </div>
               ) : (
                 data.entities.map((entity) => (
                   <div 
                     key={entity.id}
-                    className="p-3 rounded-xl bg-card border border-border-subtle hover:border-accent-cyan/40 transition-all group cursor-default"
+                    className="p-4 rounded-2xl bg-card border border-border-default hover:border-accent-cyan/40 transition-all group cursor-default shadow-sm"
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-text-primary px-2 py-0.5 rounded bg-accent-cyan/10 text-accent-cyan">
-                        {entity.entity_type.toUpperCase()}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-black text-text-primary px-2 py-0.5 rounded bg-accent-cyan/10 text-accent-cyan uppercase tracking-tighter">
+                        {entity.entity_type}
                       </span>
-                      <span className={cn(
-                        "text-[10px] px-1.5 py-0.5 rounded-full font-bold",
+                      <div className={cn(
+                        "flex items-center gap-1 px-2 py-0.5 rounded-full",
                         entity.risk_score > 0.7 ? "bg-accent-rose/10 text-accent-rose" : "bg-accent-emerald/10 text-accent-emerald"
                       )}>
-                        Risk: {(entity.risk_score * 100).toFixed(0)}%
-                      </span>
+                        <div className={cn("w-1 h-1 rounded-full", entity.risk_score > 0.7 ? "bg-accent-rose" : "bg-accent-emerald")} />
+                        <span className="text-[9px] font-black uppercase tracking-widest">
+                          Risk: {(entity.risk_score * 100).toFixed(0)}%
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-sm font-semibold text-text-primary mt-2">{entity.name}</p>
-                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-border-subtle">
-                       <span className="text-[10px] text-text-muted">Detected in 3+ cases</span>
-                       <button className="text-[10px] flex items-center gap-1 text-accent-cyan opacity-0 group-hover:opacity-100 transition-opacity">
-                         Details <ChevronRight size={10} />
-                       </button>
+                    
+                    <p className="text-sm font-black text-text-primary mt-1 tracking-tight leading-tight">{entity.name}</p>
+                    
+                    <div className="mt-4 pt-3 border-t border-border-subtle/50 space-y-2">
+                       <p className="text-[9px] font-bold text-text-muted uppercase tracking-widest">Involved Cases</p>
+                       <div className="space-y-1.5">
+                          {/* We assume entity.occurrences is populated via the API refactor or exists in types */}
+                          {entity.occurrences?.map((occ: any, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2 group/item">
+                               <div className="w-1 h-1 rounded-full bg-accent-cyan/40 group-hover/item:bg-accent-cyan transition-colors" />
+                               <span className="text-[10px] font-bold text-text-secondary truncate flex-1">
+                                 {occ.case_name || `Case ${occ.case_id?.slice(0, 8)}`}
+                               </span>
+                               <span className="text-[8px] font-mono text-text-muted/50 uppercase">{occ.source_type}</span>
+                            </div>
+                          ))}
+                          {!entity.occurrences && (
+                             <p className="text-[10px] text-text-muted italic">Found in 2+ historical vaults</p>
+                          )}
+                       </div>
                     </div>
+
+                    <button className="w-full mt-4 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-secondary/50 hover:bg-tertiary transition-all text-[10px] font-bold text-text-muted hover:text-accent-cyan border border-transparent hover:border-accent-cyan/20">
+                       Full Risk Profile <ChevronRight size={12} />
+                    </button>
                   </div>
                 ))
               )}

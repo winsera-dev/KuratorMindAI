@@ -59,16 +59,45 @@ def _get_supabase() -> Client:
 def _extract_pdf(file_bytes: bytes) -> list[dict]:
     """
     Extract text from a PDF, page by page.
+    Automatically triggers Gemini Vision OCR for scanned pages.
 
     Returns:
         List of dicts: {page_number, text}
     """
     pages: list[dict] = []
     doc = fitz.open(stream=file_bytes, filetype="pdf")
+    
+    client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+    
     for page_num, page in enumerate(doc, start=1):
         text = page.get_text("text").strip()
+        
+        # Heuristic: If less than 100 chars, it's likely a scan or image-only page
+        if len(text) < 100:
+            logger.info(f"Page {page_num} appears to be a scan (chars: {len(text)}). Triggering Vision OCR...")
+            
+            # Convert page to image
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) # 2x zoom for better OCR
+            img_bytes = pix.tobytes("png")
+            
+            try:
+                response = client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=[
+                        "Extract all text from this Indonesian legal document page. "
+                        "Preserve table structures using markdown format if present. "
+                        "Focus on names, dates, and currency amounts (IDR/USD).",
+                        genai.types.Part.from_bytes(data=img_bytes, mime_type="image/png")
+                    ]
+                )
+                text = response.text or ""
+                logger.info(f"Vision OCR successful for page {page_num}")
+            except Exception as e:
+                logger.error(f"Vision OCR failed for page {page_num}: {e}")
+        
         if text:
             pages.append({"page_number": page_num, "text": text})
+            
     doc.close()
     return pages
 

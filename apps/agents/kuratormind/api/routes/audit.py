@@ -55,11 +55,18 @@ def _get_supabase() -> Client:
 @router.get("/audit/flags/{case_id}", response_model=dict)
 async def list_audit_flags(
     case_id: str, 
+    current_user: Annotated[str, Depends(get_current_user)],
     severity: Optional[str] = Query(None),
     resolved: Optional[bool] = Query(None)
 ):
     """List forensic red flags for a specific case."""
     sb = _get_supabase()
+    
+    # Ownership check: verify case belongs to current_user
+    case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+    if not case.data or case.data.get("user_id") != current_user:
+        raise HTTPException(status_code=403, detail="Access denied to this case.")
+
     query = sb.table("audit_flags").select("*").eq("case_id", case_id)
     
     if severity:

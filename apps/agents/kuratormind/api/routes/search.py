@@ -6,13 +6,20 @@ Used by the 'Discovery' tab to find forensic evidence.
 """
 
 import logging
-from typing import List, Optional
-from fastapi import APIRouter, HTTPException  # type: ignore
+import os
+from typing import List, Optional, Annotated
+from fastapi import APIRouter, HTTPException, Depends  # type: ignore
 from pydantic import BaseModel  # type: ignore
+from supabase import create_client, Client # type: ignore
+from kuratormind.api.deps import get_current_user
 from kuratormind.tools.supabase_tools import semantic_search # type: ignore
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# ------------------------------------------------------------
+# Models
+# ------------------------------------------------------------
 
 class SearchRequest(BaseModel):
     case_id: str
@@ -33,13 +40,35 @@ class SearchResponse(BaseModel):
     query: str
     fallback: bool = False
 
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+
+def _get_supabase() -> Client:
+    url = os.environ["SUPABASE_URL"]
+    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    return create_client(url, key)
+
+# ------------------------------------------------------------
+# Routes
+# ------------------------------------------------------------
+
 @router.post("/search", response_model=SearchResponse)
-async def case_search(request: SearchRequest):
+async def case_search(
+    request: SearchRequest,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
     """
     Perform a semantic search across all document chunks in a case.
     Returns ranked results with citations.
     """
     try:
+        sb = _get_supabase()
+        # Ownership check: verify case belongs to current_user
+        case = sb.table("cases").select("user_id").eq("id", request.case_id).maybe_single().execute()
+        if not case.data or case.data.get("user_id") != current_user:
+            raise HTTPException(status_code=403, detail="Access denied to this case.")
+
         search_results = semantic_search(
             case_id=request.case_id,
             query=request.query,
@@ -67,6 +96,8 @@ async def case_search(request: SearchRequest):
             "fallback": search_results.get("fallback", False)
         })
         
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error(f"Search API Error: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))

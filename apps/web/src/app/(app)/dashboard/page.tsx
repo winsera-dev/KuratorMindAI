@@ -10,7 +10,7 @@ import {
   RefreshCw
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import CreateCaseModal from "@/components/modals/CreateCaseModal";
+import CaseModal from "@/components/modals/CaseModal";
 import CaseCard from "@/components/CaseCard";
 import { getCases } from "@/lib/api";
 
@@ -134,15 +134,14 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Create Case Modal */}
-      {userId && (
-        <CreateCaseModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          onSuccess={() => setRefreshKey(prev => prev + 1)}
-          userId={userId}
-        />
-      )}
+      {/* Case Modal (Unifed Create/Edit) */}
+      <CaseModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={() => setRefreshKey(prev => prev + 1)}
+        mode="create"
+        userId={userId || undefined}
+      />
     </div>
   );
 }

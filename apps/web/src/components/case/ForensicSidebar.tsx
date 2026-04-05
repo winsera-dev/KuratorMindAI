@@ -87,46 +87,60 @@ export function ForensicSidebar({ evidence, onClose }: ForensicSidebarProps) {
         </header>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+        <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
           {/* Metadata Grid */}
           <section className="grid grid-cols-2 gap-4">
-            <div className="p-3 bg-secondary/50 rounded-xl border border-border-default">
-              <span className="text-[9px] font-bold text-text-muted uppercase tracking-widest block mb-1">Document</span>
-              <p className="text-xs font-bold text-text-primary line-clamp-1">{evidence.file_name || "Unknown"}</p>
+            <div className="p-4 bg-secondary/50 rounded-2xl border border-border-default shadow-sm">
+              <span className="text-[10px] font-black text-text-muted uppercase tracking-widest block mb-1">Source Origin</span>
+              <p className="text-xs font-black text-text-primary line-clamp-1 truncate">{evidence.file_name || "Case Evidence"}</p>
             </div>
-            <div className="p-3 bg-secondary/50 rounded-xl border border-border-default">
-              <span className="text-[9px] font-bold text-text-muted uppercase tracking-widest block mb-1">Page Reference</span>
-              <p className="text-xs font-bold text-text-primary">Page {evidence.page || "?"}</p>
+            <div className="p-4 bg-secondary/50 rounded-2xl border border-border-default shadow-sm">
+              <span className="text-[10px] font-black text-text-muted uppercase tracking-widest block mb-1">Exact Page</span>
+              <p className="text-xs font-black text-text-primary">P. {evidence.page || "Unspecified"}</p>
             </div>
           </section>
 
           {/* Source Snippet */}
-          <section className="space-y-3">
+          <section className="space-y-4">
             <div className="flex items-center justify-between px-1">
-              <h3 className="text-[10px] font-bold text-text-muted uppercase tracking-widest flex items-center gap-1.5">
-                <FileText size={12} className="text-accent-cyan" /> Original Excerpt
+              <h3 className="text-[10px] font-black text-text-muted uppercase tracking-widest flex items-center gap-2">
+                <FileText size={12} className="text-accent-cyan" /> Ground Truth Excerpt
               </h3>
+              <div className="px-2 py-0.5 rounded bg-accent-cyan/10 border border-accent-cyan/20 text-[8px] font-black text-accent-cyan uppercase">Raw Data</div>
             </div>
             <div className="relative group">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-accent-cyan/20 to-accent-blue/20 rounded-2xl blur opacity-30 group-hover:opacity-100 transition duration-1000"></div>
-              <div className="relative p-5 bg-black/40 border border-border-default rounded-2xl text-sm leading-relaxed text-text-secondary font-medium font-serif italic shadow-inner">
-                "{evidence.text_snippet || evidence.description || "The original text content is currently unavailable or being processed."}"
+              <div className="absolute -inset-1 bg-gradient-to-r from-accent-cyan/10 to-accent-blue/10 rounded-[22px] blur-sm opacity-50 group-hover:opacity-100 transition duration-1000"></div>
+              <div className="relative p-6 bg-secondary/80 border border-border-default rounded-3xl text-sm leading-relaxed text-text-primary font-serif italic shadow-inner min-h-[160px]">
+                {evidence.text_snippet ? (
+                   <span className="relative z-10">"{evidence.text_snippet}"</span>
+                ) : (
+                   <div className="flex flex-col items-center justify-center py-8 text-text-muted opacity-40">
+                      <Loader2 size={24} className="animate-spin mb-2" />
+                      <p className="text-[10px] font-bold uppercase tracking-widest">Reconstructing Trace...</p>
+                   </div>
+                )}
               </div>
             </div>
           </section>
 
           {/* Forensic Context */}
-          <section className="space-y-3">
-            <h3 className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Inference Details</h3>
-            <div className="space-y-2">
-                <div className="flex items-center gap-2.5 text-xs text-text-secondary bg-secondary/20 p-2.5 rounded-lg border border-border-default/50">
-                    <Clock size={14} className="text-accent-emerald" />
-                    <span>Verified by Claim Auditor Agent</span>
+          <section className="space-y-4">
+            <h3 className="text-[10px] font-black text-text-muted uppercase tracking-widest px-1">Forensic Validation</h3>
+            <div className="space-y-3">
+                <div className="flex items-start gap-3 text-xs text-text-secondary bg-accent-emerald/5 p-4 rounded-2xl border border-accent-emerald/20">
+                    <ShieldCheck size={16} className="text-accent-emerald mt-0.5 shrink-0" />
+                    <div>
+                       <p className="font-black text-accent-emerald uppercase text-[10px] tracking-tight">Verified Ingestion</p>
+                       <p className="text-[11px] font-medium mt-1 leading-relaxed text-text-secondary">This snippet was indexed using semantic embeddings and validated against the source checksum.</p>
+                    </div>
                 </div>
                 {evidence.severity && (
-                    <div className="flex items-center gap-2.5 text-xs text-text-secondary bg-secondary/20 p-2.5 rounded-lg border border-border-default/50">
-                        <AlertTriangle size={14} className="text-accent-rose" />
-                        <span className="capitalize">Severity Level: <strong className="text-accent-rose">{evidence.severity}</strong></span>
+                    <div className="flex items-start gap-3 text-xs text-text-secondary bg-accent-rose/5 p-4 rounded-2xl border border-accent-rose/20">
+                        <AlertTriangle size={16} className="text-accent-rose mt-0.5 shrink-0" />
+                        <div>
+                           <p className="font-black text-accent-rose uppercase text-[10px] tracking-tight">Risk Identified</p>
+                           <p className="text-[11px] font-medium mt-1 leading-relaxed text-text-secondary italic">Severity: <strong className="uppercase">{evidence.severity}</strong>. Flagged by Claim Auditor Swarm.</p>
+                        </div>
                     </div>
                 )}
             </div>

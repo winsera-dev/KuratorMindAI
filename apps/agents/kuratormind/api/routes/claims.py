@@ -108,7 +108,11 @@ async def list_claims(case_id: str):
         raise HTTPException(status_code=500, detail=detail)
 
 @router.patch("/claims/{claim_id}", response_model=ClaimResponse)
-async def update_claim(claim_id: str, updates: ClaimUpdate):
+async def update_claim(
+    claim_id: str, 
+    updates: ClaimUpdate,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
     """Update a claim's status or details (Kurator manual override)."""
     sb = _get_supabase()
     
@@ -117,11 +121,15 @@ async def update_claim(claim_id: str, updates: ClaimUpdate):
         update_data["verified_at"] = datetime.now().isoformat()
     
     try:
-        # Verify claim exists
-        existing = sb.table("claims").select("id").eq("id", claim_id).execute()
+        # Verify claim exists and belongs to a case owned by current_user
+        existing = sb.table("claims").select("id, case_id, cases(user_id)").eq("id", claim_id).single().execute()
         if not existing.data:
             raise HTTPException(status_code=404, detail="Claim not found.")
             
+        case_owner = (existing.data.get("cases") or {}).get("user_id")
+        if case_owner and case_owner != current_user:
+            raise HTTPException(status_code=403, detail="Access denied.")
+
         result = sb.table("claims")\
             .update(update_data)\
             .eq("id", claim_id)\
@@ -136,3 +144,4 @@ async def update_claim(claim_id: str, updates: ClaimUpdate):
     except Exception as exc:
         logger.error("Update claim failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
+eption(status_code=500, detail=str(exc))
