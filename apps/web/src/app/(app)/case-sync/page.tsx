@@ -79,8 +79,10 @@ export default function CaseSyncPage() {
   }, [fetchAllData]);
 
   useEffect(() => {
-    terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
+    if (syncing) {
+      terminalEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [logs, syncing]);
 
   const handleSync = async () => {
     if (syncing) return;
@@ -130,7 +132,7 @@ export default function CaseSyncPage() {
     : new Date();
 
   return (
-    <div className="p-8 space-y-8 bg-[#050608] text-text-primary min-h-full">
+    <div className="flex-1 h-full overflow-y-auto bg-[#050608] text-text-primary p-8 space-y-8 custom-scrollbar">
       {/* Header Section */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1">
