@@ -185,33 +185,63 @@ export function OutputsTab({ caseId, documentCount = 0 }: OutputsTabProps) {
                   No Documents Uploaded
                 </div>
               ) : (
-                <button 
-                  onClick={() => handleGenerate(tpl.id as OutputType, tpl.title)}
-                  disabled={generating !== null}
-                  className={cn(
-                    "mt-6 w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
-                    generating === tpl.id 
-                      ? "bg-secondary text-text-muted cursor-not-allowed" 
-                      : "bg-text-secondary text-white hover:bg-text-primary shadow-lg shadow-black/5"
-                  )}
-                >
-                  {generating === tpl.id ? (
-                    <div className="flex flex-col items-center gap-1.5">
+                <div className="mt-6 space-y-3">
+                  <button 
+                    onClick={() => handleGenerate(tpl.id as OutputType, tpl.title)}
+                    disabled={generating !== null}
+                    className={cn(
+                      "w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                      generating === tpl.id 
+                        ? "bg-secondary text-text-muted cursor-not-allowed" 
+                        : "bg-text-secondary text-white hover:bg-text-primary shadow-lg shadow-black/5"
+                    )}
+                  >
+                    {generating === tpl.id ? (
                       <div className="flex items-center gap-2">
                         <RotateCw size={14} className="animate-spin" />
-                        <span className="animate-pulse">Generating...</span>
+                        <span className="animate-pulse">Architect Processing...</span>
                       </div>
-                      <span className="text-[9px] lowercase font-medium text-text-muted/80 normal-case tracking-tight italic">
-                        {statusMessage || "Architect thinking..."}
-                      </span>
+                    ) : (
+                      <>
+                        <Plus size={14} />
+                        New Document
+                      </>
+                    )}
+                  </button>
+                  
+                  {generating === tpl.id && (
+                    <div className="space-y-2 animate-in fade-in duration-500">
+                        <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest text-accent-blue">
+                            <span>{statusMessage || "Initializing..."}</span>
+                            <span>{
+                                statusMessage?.includes("Init") ? "20%" :
+                                statusMessage?.includes("Styl") ? "40%" :
+                                statusMessage?.includes("Draft") ? "60%" :
+                                statusMessage?.includes("Vault") ? "80%" :
+                                statusMessage?.includes("Commit") ? "95%" : "10%"
+                            }</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden border border-border-subtle/50 shadow-inner">
+                            <div 
+                                className="h-full bg-gradient-to-r from-accent-blue via-accent-cyan to-accent-blue bg-[length:200%_100%] animate-shimmer transition-all duration-1000 ease-out rounded-full"
+                                style={{ width: 
+                                    statusMessage?.includes("Init") ? "20%" :
+                                    statusMessage?.includes("Styl") ? "40%" :
+                                    statusMessage?.includes("Draft") ? "60%" :
+                                    statusMessage?.includes("Vault") ? "80%" :
+                                    statusMessage?.includes("Commit") ? "95%" : "5%"
+                                }}
+                            />
+                        </div>
+                        <p className="text-[10px] text-text-muted italic text-center font-medium lowercase first-letter:uppercase">
+                            {statusMessage?.includes("Draft") ? "Analyzing legal grounding..." : 
+                             statusMessage?.includes("Vault") ? "Securing to case vault..." :
+                             statusMessage?.includes("Styl") ? "Applying forensic branding..." :
+                             "Orchestrating agent collaboration..."}
+                        </p>
                     </div>
-                  ) : (
-                    <>
-                      <Plus size={14} />
-                      New Document
-                    </>
                   )}
-                </button>
+                </div>
               )}
             </div>
           ))}

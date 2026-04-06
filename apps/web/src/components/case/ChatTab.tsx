@@ -196,18 +196,30 @@ export function ChatTab({ caseId, onViewSource }: ChatTabProps) {
       {/* 2. Messages Core */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-none">
         {!historyLoaded ? (
-          <div className="space-y-6">
-            <div className="flex gap-4 max-w-[85%] animate-pulse">
-              <div className="w-9 h-9 rounded-xl bg-accent-blue/10 shrink-0" />
-              <div className="h-16 w-full bg-secondary/50 rounded-2xl rounded-tl-sm" />
+          <div className="space-y-8">
+            {/* Assistant Skeleton */}
+            <div className="flex gap-4 max-w-[80%] animate-pulse">
+              <div className="w-10 h-10 rounded-2xl bg-accent-blue/10 shrink-0" />
+              <div className="space-y-3 w-full">
+                <div className="h-4 bg-secondary/60 rounded-full w-[40%]" />
+                <div className="h-20 bg-secondary/40 rounded-3xl rounded-tl-none border border-border-subtle/50" />
+              </div>
             </div>
-            <div className="flex gap-4 max-w-[85%] ml-auto flex-row-reverse animate-pulse">
-              <div className="w-9 h-9 rounded-xl bg-text-muted/10 shrink-0" />
-              <div className="h-12 w-48 bg-secondary/50 rounded-2xl rounded-tr-sm" />
+            {/* User Skeleton */}
+            <div className="flex gap-4 max-w-[70%] ml-auto flex-row-reverse animate-pulse">
+              <div className="w-10 h-10 rounded-2xl bg-text-muted/10 shrink-0" />
+              <div className="space-y-3 w-full flex flex-col items-end">
+                <div className="h-4 bg-secondary/60 rounded-full w-[30%]" />
+                <div className="h-12 bg-accent-blue/10 rounded-3xl rounded-tr-none w-full" />
+              </div>
             </div>
+            {/* Assistant Skeleton 2 */}
             <div className="flex gap-4 max-w-[85%] animate-pulse">
-              <div className="w-9 h-9 rounded-xl bg-accent-blue/10 shrink-0" />
-              <div className="h-24 w-full bg-secondary/50 rounded-2xl rounded-tl-sm" />
+              <div className="w-10 h-10 rounded-2xl bg-accent-blue/10 shrink-0" />
+              <div className="space-y-3 w-full">
+                <div className="h-4 bg-secondary/60 rounded-full w-[50%]" />
+                <div className="h-32 bg-secondary/40 rounded-3xl rounded-tl-none border border-border-subtle/50" />
+              </div>
             </div>
           </div>
         ) : (
@@ -220,31 +232,33 @@ export function ChatTab({ caseId, onViewSource }: ChatTabProps) {
             <div className="w-9 h-9 rounded-xl bg-accent-blue/5 border border-accent-blue/20 flex items-center justify-center shrink-0 animate-pulse">
               <Bot size={18} className="text-accent-blue" />
             </div>
-            <div className="flex items-center gap-3 px-4 py-2 bg-secondary/50 rounded-2xl border border-border-subtle shadow-sm">
-              <div className="flex items-center gap-2">
-                <Loader2 size={12} className="animate-spin text-accent-blue" />
-                <span className="text-xs font-bold text-text-muted uppercase tracking-widest">{agentStatus}</span>
-              </div>
-              
-              {agentConfidence !== undefined && agentConfidence > 0 && (
-                <>
-                  <div className="w-px h-3 bg-border-subtle" />
-                  <div className="flex items-center gap-1.5">
-                    <div className={`w-1.5 h-1.5 rounded-full ${
-                      agentConfidence >= 0.8 ? 'bg-accent-emerald shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 
-                      agentConfidence >= 0.5 ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 
-                      'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
-                    }`} />
-                    <span className={`text-[10px] font-black tabular-nums tracking-tight ${
-                      agentConfidence >= 0.8 ? 'text-accent-emerald' : 
-                      agentConfidence >= 0.5 ? 'text-amber-500' : 
-                      'text-rose-500'
-                    }`}>
-                      {Math.round(agentConfidence * 100)}% ({agentConfidence >= 0.8 ? 'HIGH' : agentConfidence >= 0.5 ? 'MEDIUM' : 'LOW'}) CONFIDENCE
-                    </span>
-                  </div>
-                </>
-              )}
+            <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3 px-4 py-2 bg-secondary/50 rounded-2xl border border-border-subtle shadow-sm">
+                    <div className="flex items-center gap-2">
+                        <Loader2 size={12} className="animate-spin text-accent-blue" />
+                        <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">{agentStatus}</span>
+                    </div>
+                    
+                    {agentConfidence !== undefined && agentConfidence > 0 && (
+                        <>
+                        <div className="w-px h-3 bg-border-subtle" />
+                        <div className="flex items-center gap-1.5">
+                            <div className={`w-1.5 h-1.5 rounded-full ${
+                            agentConfidence >= 0.8 ? 'bg-accent-emerald shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 
+                            agentConfidence >= 0.5 ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 
+                            'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
+                            }`} />
+                            <span className={`text-[10px] font-black tabular-nums tracking-tight ${
+                            agentConfidence >= 0.8 ? 'text-accent-emerald' : 
+                            agentConfidence >= 0.5 ? 'text-amber-500' : 
+                            'text-rose-500'
+                            }`}>
+                            {Math.round(agentConfidence * 100)}% ({agentConfidence >= 0.8 ? 'HIGH' : agentConfidence >= 0.5 ? 'MEDIUM' : 'LOW'}) CONFIDENCE
+                            </span>
+                        </div>
+                        </>
+                    )}
+                </div>
             </div>
           </div>
         )}
@@ -342,14 +356,20 @@ function ChatMessage({ m, onViewSource }: { m: LocalMessage, onViewSource: any }
           
           {isBot && (
               <div className="flex items-center gap-4 px-2 mt-1">
-                  <div className="flex items-center gap-1 opacity-50">
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-accent-emerald/5 border border-accent-emerald/10">
                       <ShieldCheck size={10} className="text-accent-emerald" />
-                      <span className="text-[9px] font-bold text-text-muted uppercase tracking-widest">Verified Citations</span>
+                      <span className="text-[9px] font-black text-accent-emerald uppercase tracking-widest">Grounded Evidence</span>
                   </div>
                   {m.agent && (
-                      <div className="flex items-center gap-1 opacity-50">
+                      <div className="flex items-center gap-1 opacity-70">
                           <Zap size={10} className="text-accent-blue" />
                           <span className="text-[9px] font-black text-accent-blue uppercase tracking-widest font-mono">{m.agent}</span>
+                      </div>
+                  )}
+                  {isBot && !m.streaming && (
+                      <div className="ml-auto flex items-center gap-1 opacity-40 hover:opacity-100 transition-opacity cursor-help">
+                          <Info size={10} />
+                          <span className="text-[8px] font-bold uppercase tracking-tighter">AI Analysis</span>
                       </div>
                   )}
               </div>

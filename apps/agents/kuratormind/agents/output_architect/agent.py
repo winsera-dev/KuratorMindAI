@@ -49,7 +49,8 @@ def generate_and_save_report(
     case_id: str, 
     title: str, 
     output_type: str, 
-    markdown_content: str
+    markdown_content: str,
+    progress_callback: callable = None
 ) -> dict:
     """Generates a professional PDF and saves the report to the database.
     
@@ -58,6 +59,7 @@ def generate_and_save_report(
         title: Title of the report.
         output_type: 'judge_report', 'creditor_list', 'forensic_summary'.
         markdown_content: The full markdown body of the report.
+        progress_callback: Optional callable for SSE status updates.
     """
     import os
     import uuid
@@ -77,9 +79,10 @@ def generate_and_save_report(
         # 1. Generate local PDF
         report_id = str(uuid.uuid4())
         tmp_path = f"/tmp/{report_id}.pdf"
-        generate_forensic_pdf(title, markdown_content, tmp_path, case_id=case_id)
+        generate_forensic_pdf(title, markdown_content, tmp_path, case_id=case_id, progress_callback=progress_callback)
         
         # 2. Upload to Supabase Storage
+        if progress_callback: progress_callback("Vaulting forensic evidence to secure storage...")
         logging.info(f"Uploading report {report_id} to storage...")
         url = os.environ.get("SUPABASE_URL", "")
         key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
@@ -97,6 +100,7 @@ def generate_and_save_report(
             )
             
         # 3. Save record to DB
+        if progress_callback: progress_callback("Committing forensic audit sequence...")
         logging.info(f"Saving report record to database...")
         res = save_generated_output(
             case_id=case_id,

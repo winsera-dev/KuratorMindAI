@@ -79,5 +79,10 @@
   "statusLine": {
     "type": "command",
     "command": "node .agent/skills/gsd/hooks/gsd-statusline.js"
+  },
+  "commands": {
+    "gsd": {
+      "directory": ".agent/skills/gsd/commands/gsd"
+    }
   }
 }

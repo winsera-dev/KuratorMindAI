@@ -43,7 +43,7 @@ def _validate_case_number(case_number: str):
             )
         )
 
-def _get_supabase() -> Client:
+class CaseBase(BaseModel):
     name: str
     description: Optional[str] = None
     debtor_entity: Optional[str] = None
@@ -306,10 +306,15 @@ async def get_case(
     auth_enabled = os.environ.get("AUTH_ENABLED", "false").lower() == "true"
     
     try:
-        sb = _get_supabase()
+        # System Case Bypass: Allow access to the Global Legal Case ID for everyone
+        GLOBAL_ID = "00000000-0000-0000-0000-000000000000"
+        
         query = sb.table("cases").select("*").eq("id", case_id)
         
-        if not auth_enabled:
+        if case_id == GLOBAL_ID:
+            # Always allow the global case
+            pass
+        elif not auth_enabled:
             # In dev mode, allow access if owned by dev_user OR orphaned
             query = query.or_(f"user_id.eq.{current_user},user_id.is.null")
         else:

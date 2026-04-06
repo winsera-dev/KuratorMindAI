@@ -177,13 +177,16 @@ class KuratorReport(FPDF):
             self.ln()
         self.ln(5)
 
-def generate_forensic_pdf(title: str, content: str, output_path: str, case_id: str | None = None):
+def generate_forensic_pdf(title: str, content: str, output_path: str, case_id: str | None = None, progress_callback: callable = None):
     """
     Main entrypoint for generating a PDF report.
     Enriches with case metadata if available in DB.
+    `progress_callback` should accept a string status message.
     """
     import os
     from supabase import create_client
+    
+    if progress_callback: progress_callback("Initializing forensic report architect...")
     
     case_meta = None
     if case_id:
@@ -198,6 +201,7 @@ def generate_forensic_pdf(title: str, content: str, output_path: str, case_id: s
         except Exception as e:
             pass
     
+    if progress_callback: progress_callback("Styling forensic certificate...")
     pdf = KuratorReport(case_metadata=case_meta)
     pdf.alias_nb_pages()
     pdf.set_auto_page_break(auto=True, margin=20)
@@ -205,6 +209,7 @@ def generate_forensic_pdf(title: str, content: str, output_path: str, case_id: s
     # Render Certificate Page first!
     pdf.render_certificate_page()
     
+    if progress_callback: progress_callback("Drafting report body from LLM intelligence...")
     pdf.add_page()
     
     # Reset text color for body
@@ -297,5 +302,6 @@ def generate_forensic_pdf(title: str, content: str, output_path: str, case_id: s
     # Render Footer Note page if citations present
     pdf.render_footnotes()
     
+    if progress_callback: progress_callback("Finalizing forensic file encoding...")
     pdf.output(output_path)
     return output_path

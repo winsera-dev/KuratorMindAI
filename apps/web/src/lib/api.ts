@@ -176,9 +176,6 @@ export async function deleteCase(caseId: string): Promise<void> {
   if (!res.ok) throw new Error("Failed to delete case");
 }
 
-/**
- * Get aggregated statistics for a case.
- */
 export async function getCaseStats(caseId: string): Promise<{
   document_count: number;
   total_claims_idr: number;
@@ -188,6 +185,54 @@ export async function getCaseStats(caseId: string): Promise<{
   const res = await fetch(`${BASE_URL}/api/v1/cases/${caseId}/stats`, { headers });
   if (!res.ok) throw new Error("Failed to fetch case stats");
   return res.json();
+}
+
+/**
+ * Trigger a manual synchronization of official regulations.
+ */
+export async function triggerSync(keywords: string[]): Promise<any> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${BASE_URL}/api/v1/cases/sync-regulations`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ keywords, force: true }),
+    });
+
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail ?? "Sync failed");
+    }
+    
+    return res.json();
+}
+
+/**
+ * Fetch metadata and stats for the Global Legal Case.
+ */
+export async function getGlobalCaseStats(): Promise<{
+  document_count: number;
+  total_claims_idr: number;
+  flag_count: number;
+  metadata?: { last_sync?: string };
+}> {
+  const GLOBAL_ID = "00000000-0000-0000-0000-000000000000";
+  const headers = await getAuthHeaders();
+  
+  // Use existing stats endpoint
+  const statsRes = await fetch(`${BASE_URL}/api/v1/cases/${GLOBAL_ID}/stats`, { headers });
+  const caseRes = await fetch(`${BASE_URL}/api/v1/cases/${GLOBAL_ID}`, { headers });
+  
+  if (!statsRes.ok || !caseRes.ok) throw new Error("Failed to fetch global stats");
+  
+  const stats = await statsRes.json();
+  const caseData = await caseRes.json();
+  
+  return {
+    document_count: stats.document_count,
+    total_claims_idr: stats.total_claims_idr,
+    flag_count: stats.flag_count,
+    metadata: caseData.metadata
+  };
 }
 
 // ---------------------------------------------------------------------------
