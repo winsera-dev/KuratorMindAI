@@ -1,3 +1,5 @@
+import { config } from "@/config";
+
 /**
  * KuratorMind AI — Backend Health Proxy
  *
@@ -7,8 +9,7 @@
  * server-to-server (no CORS needed).
  */
 
-const AGENT_API_URL =
-  process.env.NEXT_PUBLIC_AGENT_API_URL ?? "http://localhost:8000";
+const AGENT_API_URL = config.api.agentUrl;
 
 export async function GET() {
   try {

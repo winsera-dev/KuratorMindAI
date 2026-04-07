@@ -128,7 +128,7 @@ def generate_and_save_report(
 
 output_architect = Agent(
     name="output_architect",
-    model="models/gemini-flash-latest",
+    model="gemini-2.0-flash",
     description=(
         "Specializes in report generation and forensic synthesis. "
         "Consolidates findings from all agents into a final Audit Report."

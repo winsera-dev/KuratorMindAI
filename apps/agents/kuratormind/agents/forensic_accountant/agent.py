@@ -43,7 +43,7 @@ Analytic, precise, and forensic. Use Indonesian for financial line items as they
 
 forensic_accountant = Agent(
     name="forensic_accountant",
-    model="gemini-2.5-pro",
+    model="gemini-2.0-pro",
     description=(
         "Specialized in analyzing Balance Sheets, Income Statements, and Cash Flow. "
         "Flags accounting anomalies, calculates ratios, and ensures PSAK compliance."

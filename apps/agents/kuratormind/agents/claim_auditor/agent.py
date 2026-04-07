@@ -49,7 +49,7 @@ Formal, forensic, and objective. Use Indonesian for legal terms.
 
 claim_auditor = Agent(
     name="claim_auditor",
-    model="gemini-2.5-pro",
+    model="gemini-2.0-pro",
     description=(
         "Specialized in verifying creditor claims and identifying contradictions "
         "between claims and evidence (bank statements, ledgers, contracts)."

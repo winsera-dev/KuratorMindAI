@@ -219,3 +219,15 @@ export interface GeneratedOutput {
   metadata: Record<string, unknown>;
   created_at: string;
 }
+
+export interface Profile {
+  id: string;
+  full_name?: string;
+  avatar_url?: string;
+  license_number?: string;
+  job_title?: string;
+  specialization?: string;
+  default_court?: string;
+  default_currency?: string;
+  updated_at: string;
+}

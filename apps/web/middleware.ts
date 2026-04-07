@@ -8,10 +8,16 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.warn("[Middleware] Missing Supabase environment variables, skipping auth");
+      return response;
+    }
+
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -26,23 +32,33 @@ export async function middleware(request: NextRequest) {
           );
         },
       },
+    });
+
+    // Refresh session
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const isProtectedRoute = 
+      request.nextUrl.pathname.startsWith("/dashboard") || 
+      request.nextUrl.pathname.startsWith("/vault") ||
+      request.nextUrl.pathname.startsWith("/case-sync") ||
+      request.nextUrl.pathname.startsWith("/settings");
+                             
+    if (isProtectedRoute && !user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
     }
-  );
 
-  const { data: { user } } = await supabase.auth.getUser();
-
-  // If the user is not logged in and trying to access the app
-  // Protect all routes starting with /dashboard or /vault
-  const isProtectedRoute = request.nextUrl.pathname.startsWith("/dashboard") || 
-                           request.nextUrl.pathname.startsWith("/vault");
-                           
-  if (isProtectedRoute && !user) {
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  // If logged in and trying to access auth pages
-  if (user && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/register")) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    if (user && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/register")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
+  } catch (error) {
+    console.error("[Middleware Error]:", error);
+    // Continue even on error to avoid deadlocking the app
   }
 
   return response;

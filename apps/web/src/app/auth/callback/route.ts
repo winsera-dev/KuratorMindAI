@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { config } from "@/config";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       const forwardedHost = request.headers.get("x-forwarded-host"); // latest Next.js feature
-      const isLocalEnv = process.env.NODE_ENV === "development";
+      const isLocalEnv = config.isDev;
       if (isLocalEnv) {
         // we can skip the check on local env
         return NextResponse.redirect(`${origin}${next}`);

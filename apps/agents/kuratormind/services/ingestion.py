@@ -245,7 +245,7 @@ def _generate_summary(full_text: str, file_name: str) -> str:
         client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
         snippet: str = full_text[:4000]  # type: ignore[index]  # Pyre2 slice stub bug
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.0-flash",
             contents=[
                 {
                     "role": "user",
@@ -485,7 +485,7 @@ def _trigger_claim_audit(case_id: str, document_id: str, file_name: str):
         ]}]
         
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.0-flash",
             contents=prompt,
             config={
                 "system_instruction": CLAIM_AUDITOR_INSTRUCTION,

@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import Image from "next/image";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
@@ -10,11 +11,16 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       </div>
 
       <div className="w-full max-w-md relative z-10">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold tracking-tight">
-            KuratorMind <span className="text-text-secondary">AI</span>
-          </h1>
-          <p className="mt-2 text-text-secondary">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <Image 
+            src="/brand/logo-full.svg?v=5" 
+            alt="KuratorMind AI" 
+            width={180} 
+            height={48} 
+            priority 
+            className="h-12 w-auto mb-2"
+          />
+          <p className="text-text-secondary">
             AI-Native Insolvency Forensic Workspace
           </p>
         </div>

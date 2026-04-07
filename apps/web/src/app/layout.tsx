@@ -19,6 +19,13 @@ export const metadata: Metadata = {
   title: "KuratorMind AI — Forensic Insolvency Workspace",
   description:
     "A multi-agent AI workspace for Indonesian Kurators. Upload case data, verify creditor claims, map debts, and generate court-ready reports — all grounded in your evidence.",
+  icons: {
+    icon: [
+      { url: "/brand/logo-icon.svg?v=5", type: "image/svg+xml" },
+    ],
+    shortcut: "/brand/logo-icon.svg?v=5",
+    apple: "/brand/logo-icon.svg?v=5",
+  },
   keywords: [
     "kurator",
     "insolvency",

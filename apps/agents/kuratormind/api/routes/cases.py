@@ -183,6 +183,9 @@ async def get_case_stats(
     """Get aggregated metrics for a specific case."""
     sb = _get_supabase()
     try:
+        # System Case Bypass: Always allow the global case stats
+        GLOBAL_ID = "00000000-0000-0000-0000-000000000000"
+        
         # 1. Document Count
         docs = sb.table("case_documents").select("id", count="exact").eq("case_id", case_id).execute()
         doc_count = docs.count if docs.count is not None else 0
@@ -304,6 +307,7 @@ async def get_case(
 ):
     """Fetch a single forensic case — only if it belongs to the authenticated user."""
     auth_enabled = os.environ.get("AUTH_ENABLED", "false").lower() == "true"
+    sb = _get_supabase()
     
     try:
         # System Case Bypass: Allow access to the Global Legal Case ID for everyone

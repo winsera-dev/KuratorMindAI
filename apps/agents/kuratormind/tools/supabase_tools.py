@@ -7,13 +7,28 @@ Provides case document search, semantic search, and CRUD operations.
 
 import os
 import json
-from typing import Optional
+import uuid
+import logging
+from typing import Optional, Any
 from google.adk.tools import FunctionTool # type: ignore
 from supabase import create_client, Client # type: ignore
 from kuratormind.services.security import encrypt_pii, decrypt_pii
 
+logger = logging.getLogger(__name__)
+
 # Initialize Supabase client
 _supabase: Optional[Client] = None
+
+
+def _is_valid_uuid(val: str) -> bool:
+    """Check if a string is a valid UUID."""
+    if not val:
+        return False
+    try:
+        uuid.UUID(str(val))
+        return True
+    except ValueError:
+        return False
 
 
 def _get_supabase() -> Client:
@@ -38,6 +53,9 @@ def search_case_documents(case_id: str, query: str) -> dict:
     Returns:
         A dict with 'documents' key containing matching documents.
     """
+    if not _is_valid_uuid(case_id):
+        return {"error": "Invalid case_id format.", "documents": []}
+
     try:
         sb = _get_supabase()
         result = (
@@ -63,6 +81,9 @@ def get_document_summary(document_id: str) -> dict:
     Returns:
         A dict with the document's details including summary.
     """
+    if not _is_valid_uuid(document_id):
+        return {"error": "Invalid document_id format."}
+
     try:
         sb = _get_supabase()
         result = (
@@ -93,6 +114,9 @@ def semantic_search(case_id: str, query: str, top_k: int = 10) -> dict:
         A dict with 'results' key containing matching chunks with
         document_id, page_number, and content for citation.
     """
+    if not _is_valid_uuid(case_id):
+        return {"error": "Invalid case_id format.", "results": []}
+
     import os
     from google import genai as _genai # type: ignore
 
@@ -341,13 +365,16 @@ def sync_legal_knowledge(keywords: list[str], force: bool = False) -> dict:
         client = _genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
         discovered_links: list[dict[str, str]] = []
         
-        for kw in keywords:
+        # Ensure keywords is a list
+        search_keywords = keywords if isinstance(keywords, list) else ["Indonesian regulations 2026", "hukum kepailitan"]
+        
+        for kw in search_keywords:
             # Broad search across official government domains (OJK, Kemenkeu, BPHN)
             search_query = f"site:ojk.go.id OR site:jdih.kemenkeu.go.id OR site:bphn.go.id {kw} 2026 2027 filetype:pdf"
             
             # Using GenAI as the "Search Bridge"
             response = client.models.generate_content(
-                model="gemini-1.5-flash",
+                model="gemini-2.0-flash",
                 contents=f"Find the official URL for the latest regulation about {kw} in 2026/2027 in Indonesia. Return only a short list of URLs.",
                 config=_genai.types.GenerateContentConfig(
                     tools=[{"google_search": {}}]

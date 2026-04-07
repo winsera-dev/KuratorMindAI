@@ -64,7 +64,7 @@ def test_regulatory_reasoning_quality(genai_client, case):
     # 1. Get Response from Agent (using its system instruction)
     try:
         response = genai_client.models.generate_content(
-            model="gemini-1.5-flash", # Use 1.5 flash for better availability/stability
+            model="gemini-2.0-flash", # Use 2.0 flash for better availability/stability
             contents=case["q"],
             config={
                 "system_instruction": REGULATORY_SCHOLAR_INSTRUCTION,

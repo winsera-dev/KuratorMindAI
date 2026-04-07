@@ -164,10 +164,17 @@ async def list_documents(
     """
     sb = _get_supabase()
     try:
-        # Ownership check: verify case belongs to current_user
-        case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
-        if not case.data or case.data.get("user_id") != current_user:
-            raise HTTPException(status_code=403, detail="Access denied to this case.")
+        # System Case Bypass: Always allow the global case for registry visibility
+        GLOBAL_ID = "00000000-0000-0000-0000-000000000000"
+        
+        if case_id == GLOBAL_ID:
+            # Always allowed for all Kurators
+            pass
+        else:
+            # Ownership check: verify case belongs to current_user
+            case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+            if not case.data or case.data.get("user_id") != current_user:
+                raise HTTPException(status_code=403, detail="Access denied to this case.")
 
         result = (
             sb.table("case_documents")

@@ -72,27 +72,52 @@ def _get_supabase():
     return create_client(url, key)
 
 
-def _upsert_session(sb, session_id: str, case_id: str, user_id: str | None) -> None:
-    """Ensure a chat_sessions row exists. Resolves user_id from case if needed."""
+def _is_valid_uuid(val: str) -> bool:
+    """Check if a string is a valid UUID."""
+    if not val:
+        return False
+    try:
+        uuid.UUID(str(val))
+        return True
+    except ValueError:
+        return False
+
+def _upsert_session(sb, session_id: str, case_id: str, user_id: str | None) -> str:
+    """Ensure a chat_sessions row exists. Resolves user_id from case if needed. Returns sanitized session_id."""
+    # TC-DEB-02: Sanitize temporary IDs ('gen-') globally
+    sanitized_session_id = session_id
+    if not sanitized_session_id or sanitized_session_id.startswith("gen-"):
+        sanitized_session_id = str(uuid.uuid4())
+        logger.info("Sanitized temporary session_id '%s' to '%s'", session_id, sanitized_session_id)
+
+    # Note: Case ID might also be 'gen-'. If so, we can't reliably upsert to DB 
+    # without a real case record. For now, we sanitize it to a dummy/new UUID to avoid 500s.
+    sanitized_case_id = case_id
+    if not sanitized_case_id or not _is_valid_uuid(sanitized_case_id):
+        sanitized_case_id = str(uuid.uuid4())
+        logger.info("Sanitized invalid case_id '%s' to '%s'", case_id, sanitized_case_id)
+
     try:
         # If user_id is missing, try to find it from the case record
         resolved_user_id = user_id
-        if not resolved_user_id:
-            case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+        if not resolved_user_id and _is_valid_uuid(sanitized_case_id):
+            case = sb.table("cases").select("user_id").eq("id", sanitized_case_id).maybe_single().execute()
             if case.data:
                 resolved_user_id = case.data.get("user_id")
 
         sb.table("chat_sessions").upsert(
             {
-                "id": session_id,
-                "case_id": case_id,
+                "id": sanitized_session_id,
+                "case_id": sanitized_case_id,
                 "user_id": resolved_user_id,
                 "title": "Untitled Chat",
             },
             on_conflict="id",
         ).execute()
+        return sanitized_session_id
     except Exception as exc:
         logger.error("Critical: Session upsert failed: %s", exc, exc_info=True)
+        return sanitized_session_id
 
 
 def _save_message(
@@ -101,19 +126,24 @@ def _save_message(
     case_id: str,
     role: str,
     content: str,
-    citations: list[dict] | None = None,
     agent_name: str | None = None,
-) -> None:
-    """Persist a chat message to Supabase."""
+    citations: list[dict] | None = None,
+):
+    """Saves a message to the chat_messages table."""
+    # TC-DEB-02: Sanitize temporary IDs ('gen-') globally
+    sanitized_session_id = session_id if _is_valid_uuid(session_id) else str(uuid.uuid4())
+    sanitized_case_id = case_id if _is_valid_uuid(case_id) else str(uuid.uuid4())
+
     try:
         sb.table("chat_messages").insert(
             {
                 "id": str(uuid.uuid4()),
-                "session_id": session_id,
+                "session_id": sanitized_session_id,
+                "case_id": sanitized_case_id,
                 "role": role,
                 "content": content,
-                "citations": citations or [],
                 "agent_name": agent_name,
+                "citations": citations or [],
             }
         ).execute()
     except Exception as exc:
@@ -122,6 +152,11 @@ def _save_message(
 
 def _get_chat_history(sb, session_id: str, limit: int = 20) -> list[dict[str, str]]:
     """Fetch recent messages for the session to provide conversational context."""
+    # TC-DEB-02: Sanitize temporary IDs ('gen-') globally
+    if not session_id or not _is_valid_uuid(session_id):
+        logger.warning("History fetch bypassed for invalid session_id: %s", session_id)
+        return []
+
     try:
         result = (
             sb.table("chat_messages")
@@ -135,7 +170,7 @@ def _get_chat_history(sb, session_id: str, limit: int = 20) -> list[dict[str, st
         raw: list[dict[str, Any]] = result.data or []
         return list(reversed(raw))
     except Exception as exc:
-        logger.error("History fetch failed: %s", exc)
+        logger.error("History fetch failed for session %s: %s", session_id, exc)
         return []
 
 
@@ -147,6 +182,11 @@ def _fetch_case_context(sb, case_id: str, query: str) -> tuple[str, list[dict]]:
     
     Returns a tuple: (formatted_markdown_context, raw_search_chunks)
     """
+    # TC-DEB-02: Sanitize temporary IDs ('gen-') globally
+    if not case_id or not _is_valid_uuid(case_id):
+        logger.warning("Case context fetch bypassed for invalid case_id: %s", case_id)
+        return "No case context available (invalid case ID).", []
+
     try:
         # 1. Fetch available document metadata
         docs = (
@@ -283,16 +323,16 @@ async def chat(
     async def generate() -> AsyncGenerator[dict, None]:
         sb = _get_supabase()
         
-        # Ensure session_id exists (needed for report generation calls)
-        # MUST be a valid UUID string for Supabase
-        session_id = chat_request.session_id or str(uuid.uuid4())
+        # Handle session ID sanitization
+        session_id = chat_request.session_id
 
         try:
             # 1. Upsert session + save user message
             # user_id always comes from the verified JWT, not request body
             resolved_user_id = current_user
             if sb:
-                _upsert_session(sb, session_id, chat_request.case_id, resolved_user_id)
+                # _upsert_session now returns the sanitized ID
+                session_id = _upsert_session(sb, session_id, chat_request.case_id, resolved_user_id)
                 _save_message(
                     sb,
                     session_id=session_id,
@@ -465,7 +505,7 @@ async def chat(
                 # Use a task and shield to pulse heartbeats while the deep chain runs.
                 api_task = asyncio.create_task(
                     client.aio.models.generate_content(
-                        model="models/gemini-2.0-flash",
+                        model="gemini-2.0-flash",
                         contents=contents,
                         config={
                             "system_instruction": system_prompt,
@@ -697,8 +737,9 @@ async def chat_sync(request: ChatRequest) -> ChatResponse:
         sb = _get_supabase()
         case_context = ""
         if sb:
-            _upsert_session(sb, request.session_id, request.case_id, request.user_id)
-            _save_message(sb, request.session_id, request.case_id, "user", request.message)
+            # _upsert_session returns sanitized UUID
+            session_id = _upsert_session(sb, request.session_id, request.case_id, request.user_id)
+            _save_message(sb, session_id, request.case_id, "user", request.message)
             case_context = _fetch_case_context(sb, request.case_id, request.message)
 
         system_prompt = SYSTEM_PROMPT_BASE

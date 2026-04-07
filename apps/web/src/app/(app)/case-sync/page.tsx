@@ -37,54 +37,11 @@ export default function CaseSyncPage() {
   const [search, setSearch] = useState("");
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
-  const addLog = (msg: string) => {
+  const addLog = useCallback((msg: string) => {
     setLogs(prev => [...prev, `[${format(new Date(), "HH:mm:ss")}] ${msg}`]);
-  };
-
-  const fetchAllData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [statsData, docsData] = await Promise.all([
-        getGlobalCaseStats(),
-        getDocuments(GLOBAL_LEGAL_CASE_ID)
-      ]);
-      setStats(statsData);
-      setRegulations(docsData.documents || []);
-      
-      // Auto-sync check (7 days)
-      const lastSync = statsData.metadata?.last_sync;
-      if (lastSync) {
-        const daysSinceSync = differenceInDays(new Date(), new Date(lastSync));
-        if (daysSinceSync >= 7) {
-          addLog("System Alert: Weekly synchronization is overdue. Starting auto-sync...");
-          handleSync();
-        } else {
-          addLog(`System Standby: Last sync was ${daysSinceSync} days ago. Everything is up to date.`);
-        }
-      } else {
-        addLog("System Alert: No sync history found. Starting initial synchronization...");
-        handleSync();
-      }
-
-    } catch (error) {
-      console.error("Error fetching sync data:", error);
-      addLog("Error: Failed to fetch system infrastructure status.");
-    } finally {
-      setLoading(false);
-    }
   }, []);
 
-  useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
-
-  useEffect(() => {
-    if (syncing) {
-      terminalEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }, [logs, syncing]);
-
-  const handleSync = async () => {
+  const handleSync = useCallback(async () => {
     if (syncing) return;
     
     setSyncing(true);
@@ -121,7 +78,51 @@ export default function CaseSyncPage() {
     } finally {
       setSyncing(false);
     }
-  };
+  }, [syncing, addLog]);
+
+  const fetchAllData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [statsData, docsData] = await Promise.all([
+        getGlobalCaseStats(),
+        getDocuments(GLOBAL_LEGAL_CASE_ID)
+      ]);
+      setStats(statsData);
+      setRegulations(docsData.documents || []);
+      
+      // Auto-sync check (7 days)
+      const lastSync = statsData.metadata?.last_sync;
+      if (lastSync) {
+        const daysSinceSync = differenceInDays(new Date(), new Date(lastSync));
+        if (daysSinceSync >= 7) {
+          addLog("System Alert: Weekly synchronization is overdue. Starting auto-sync...");
+          handleSync();
+        } else {
+          addLog(`System Standby: Last sync was ${daysSinceSync} days ago. Everything is up to date.`);
+        }
+      } else {
+        addLog("System Alert: No sync history found. Starting initial synchronization...");
+        handleSync();
+      }
+
+    } catch (error) {
+      console.error("Error fetching sync data:", error);
+      addLog("Error: Failed to fetch system infrastructure status.");
+    } finally {
+      setLoading(false);
+    }
+  }, [handleSync, addLog]);
+
+  useEffect(() => {
+    fetchAllData();
+  }, [fetchAllData]);
+
+  useEffect(() => {
+    if (syncing) {
+      terminalEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [logs, syncing]);
+
 
   const filteredRegulations = regulations.filter(reg => 
     reg.file_name.toLowerCase().includes(search.toLowerCase())
@@ -161,28 +162,28 @@ export default function CaseSyncPage() {
         </button>
       </header>
 
-      {/* Compact Stats Row - Forced Horizontal Ribbon */}
-      <div className="flex flex-row gap-4 overflow-x-auto pb-2 no-scrollbar">
+      {/* Compact Stats Row - Forced Horizontal Line */}
+      <div className="flex flex-row flex-nowrap items-center gap-4 overflow-x-auto no-scrollbar pb-4 shrink-0 px-1">
         {[
-          { icon: Scale, label: "Total Indexed", value: stats?.document_count || 0, sub: "Grounding Documents", color: "blue" },
-          { icon: ShieldCheck, label: "Sync Protocol", value: "Weekly", sub: "Automated Active", color: "teal" },
-          { icon: Calendar, label: "Last Updated", value: stats?.metadata?.last_sync ? format(new Date(stats.metadata.last_sync), "MMM dd") : "None", sub: "Registry Sync", color: "amber" },
-          { icon: Clock, label: "Next Scheduled", value: format(nextSyncDate, "MMM dd"), sub: "Auto-check Routine", color: "rose" }
+          { icon: Scale, label: "Documents", value: stats?.document_count || 0, sub: "Total Grounded", color: "blue" },
+          { icon: ShieldCheck, label: "Protocol", value: "Weekly", sub: "Auto-Sync Active", color: "teal" },
+          { icon: Calendar, label: "Updated", value: stats?.metadata?.last_sync ? format(new Date(stats.metadata.last_sync), "MMM dd") : "None", sub: "Latest Registry", color: "amber" },
+          { icon: Clock, label: "Schedule", value: format(nextSyncDate, "MMM dd"), sub: "Next Verification", color: "rose" }
         ].map((item, idx) => (
-          <div key={idx} className="bg-card/30 backdrop-blur-sm border border-border-default/50 rounded-xl p-3 flex items-center gap-3 transition-all hover:bg-card/50 hover:border-accent-blue/30 group min-w-[240px] flex-1">
-            <div className={`p-2 rounded-lg bg-accent-${item.color}/10 text-accent-${item.color} group-hover:scale-110 transition-transform`}>
-              <item.icon className="w-3.5 h-3.5" />
+          <div key={idx} className="bg-[#0A0D12] border border-white/5 rounded-xl p-3.5 flex items-center gap-4 transition-all hover:bg-white/[0.03] hover:border-accent-blue/30 group min-w-[260px] flex-1 shadow-sm">
+            <div className={`p-2 rounded-lg bg-accent-${item.color}/10 text-accent-${item.color} group-hover:scale-110 transition-transform shadow-inner`}>
+              <item.icon className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <div className="text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5 whitespace-nowrap">{item.label}</div>
-              <div className="text-base font-bold truncate">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">{item.label}</div>
+              <div className="text-lg font-bold tracking-tight leading-none mb-1">
                 {loading ? (
-                  <div className="h-5 w-12 bg-white/5 animate-pulse rounded" />
+                  <div className="h-4 w-12 bg-white/5 animate-pulse rounded" />
                 ) : (
                   item.value
                 )}
               </div>
-              <div className="text-[8px] text-text-muted mt-0.5 opacity-60 uppercase truncate">{item.sub}</div>
+              <div className="text-[9px] text-text-muted/60 uppercase truncate">{item.sub}</div>
             </div>
           </div>
         ))}
@@ -191,8 +192,8 @@ export default function CaseSyncPage() {
       {/* Main Diagnostic Workspace - Vertical Stack */}
       <div className="flex flex-col gap-8 pb-10">
         
-        {/* Regulations Data Workspace (TOP) - Highly Visible */}
-        <div className="flex flex-col bg-card border border-border-default rounded-2xl shadow-sm overflow-hidden min-h-[500px]">
+        {/* Regulations Data Workspace (TOP) - Highly Visible & Expanded */}
+        <div className="flex flex-col bg-card border border-border-default rounded-2xl shadow-sm overflow-hidden min-h-[650px] transition-all">
           {/* Workspace Header */}
           <div className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border-default shrink-0">
              <div className="flex items-center gap-3">
@@ -311,8 +312,8 @@ export default function CaseSyncPage() {
           </div>
         </div>
 
-        {/* Forensic Terminal (BOTTOM) - Stable Visibility */}
-        <div className="flex flex-col bg-card/20 rounded-2xl border border-border-default shadow-lg overflow-hidden min-h-[300px]">
+        {/* Forensic Terminal (BOTTOM) - Gounded Stability */}
+        <div className="flex flex-col bg-card/20 rounded-2xl border border-border-default shadow-lg overflow-hidden min-h-[350px] mb-8">
           {/* Terminal Window Header */}
           <div className="flex items-center justify-between px-4 py-2 bg-[#0a0c10] border-b border-border-default shrink-0">
             <div className="flex items-center gap-6">

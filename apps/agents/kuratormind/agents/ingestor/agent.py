@@ -94,7 +94,7 @@ def check_ingestion_status(document_id: str) -> dict:
 
 forensic_ingestor = Agent(
     name="forensic_ingestor",
-    model="gemini-2.5-flash",
+    model="gemini-2.0-flash",
     description=(
         "Processes uploaded documents (PDF, Excel) into searchable chunks "
         "with vector embeddings for semantic retrieval. Handles Indonesian "
