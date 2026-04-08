@@ -13,7 +13,7 @@ const envSchema = z.object({
 
   // Backend URLs
   NEXT_PUBLIC_BASE_URL: z.string().url().optional(),
-  NEXT_PUBLIC_AGENT_API_URL: z.string().url().default("http://localhost:8000"),
+  NEXT_PUBLIC_AGENT_API_URL: z.string().url().default("http://127.0.0.1:8000"),
 
   // Supabase Configuration
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),

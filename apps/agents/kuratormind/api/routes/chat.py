@@ -33,6 +33,7 @@ from kuratormind.agents.output_architect.agent import generate_and_save_report
 from kuratormind.agents.claim_auditor.agent import CLAIM_AUDITOR_INSTRUCTION
 from kuratormind.agents.forensic_accountant.agent import FORENSIC_ACCOUNTANT_INSTRUCTION
 from kuratormind.agents.regulatory_scholar.agent import REGULATORY_SCHOLAR_INSTRUCTION
+from kuratormind.agents.orchestrator.agent import ORCHESTRATOR_INSTRUCTION
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -257,22 +258,6 @@ When case documents are provided below, ground ALL answers in those documents. A
 # Agent Router
 # ---------------------------------------------------------------------------
 
-# Keywords for intent-based routing. Checked case-insensitively.
-_CLAIM_AUDITOR_KEYWORDS = [
-    "klaim", "piutang", "kreditor", "creditor", "claim", "utang",
-    "tagihan", "separatis", "konkuren", "preferen", "akta", "surat tagihan",
-]
-_REGULATORY_KEYWORDS = [
-    "pasal", "uu ", "pkpu", "hukum", "peraturan", "ojk", "mahkamah",
-    "undang-undang", "regulation", "legal", "law", "article",
-]
-_ACCOUNTANT_KEYWORDS = [
-    "laporan keuangan", "psak", "balance sheet", "neraca", "ifrs",
-    "rasio", "ratio", "aset", "liabilitas", "ekuitas", "finansial",
-    "laba", "rugi", "arus kas", "cash flow",
-]
-
-
 def _route_to_agent(
     message: str,
     agent_override: str | None,
@@ -287,19 +272,10 @@ def _route_to_agent(
         from kuratormind.agents.output_architect.agent import OUTPUT_ARCHITECT_INSTRUCTION
         return "output_architect", OUTPUT_ARCHITECT_INSTRUCTION
 
-    lower = message.lower()
-
-    if any(kw in lower for kw in _CLAIM_AUDITOR_KEYWORDS):
-        return "claim_auditor", CLAIM_AUDITOR_INSTRUCTION
-
-    if any(kw in lower for kw in _REGULATORY_KEYWORDS):
-        return "regulatory_scholar", REGULATORY_SCHOLAR_INSTRUCTION
-
-    if any(kw in lower for kw in _ACCOUNTANT_KEYWORDS):
-        return "forensic_accountant", FORENSIC_ACCOUNTANT_INSTRUCTION
-
-    # Default: Lead Orchestrator
-    return "lead_orchestrator", SYSTEM_PROMPT_BASE
+    # Default to Lead Orchestrator for multi-agent coordination
+    # We combine the SYSTEM_PROMPT_BASE (formatting rules) with the Orchestrator's specific instructions
+    full_instruction = f"{SYSTEM_PROMPT_BASE}\n\n{ORCHESTRATOR_INSTRUCTION}"
+    return "lead_orchestrator", full_instruction
 
 
 
@@ -505,7 +481,7 @@ async def chat(
                 # Use a task and shield to pulse heartbeats while the deep chain runs.
                 api_task = asyncio.create_task(
                     client.aio.models.generate_content(
-                        model="gemini-2.0-flash",
+                        model="gemini-2.5-flash-lite",
                         contents=contents,
                         config={
                             "system_instruction": system_prompt,
@@ -748,7 +724,7 @@ async def chat_sync(request: ChatRequest) -> ChatResponse:
 
         client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash-lite",
             contents=[{"role": "USER", "parts": [{"text": request.message}]}],
             config={"system_instruction": system_prompt, "temperature": 0.2},
         )

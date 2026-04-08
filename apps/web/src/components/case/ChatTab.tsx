@@ -14,7 +14,8 @@ import {
   Zap,
   Info,
   FileText,
-  FileSearch
+  FileSearch,
+  Network
 } from "lucide-react";
 import { streamChat, getChatHistory, type Citation } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -37,8 +38,8 @@ export function ChatTab({ caseId, onViewSource }: ChatTabProps) {
     {
       role: "assistant",
       content:
-        "Selamat datang di KuratorMind AI. Saya Regulatory Scholar, spesialis forensik PKPU Anda. Bagaimana saya bisa membantu menganalisis bukti hari ini?\n\nAnda dapat bertanya tentang:\n• Verifikasi dan detail klaim kreditur\n• Aliran dana dan potensi Actio Pauliana\n• Status dokumen yang telah diunggah\n• Interpretasi UU 37/2004",
-      agent: "regulatory_scholar",
+        "Selamat datang di KuratorMind AI. Saya Lead Orchestrator, spesialis forensik PKPU Anda. Saya mengoordinasikan tim agen (Regulatory Scholar, Forensic Accountant, Claim Auditor) untuk membantu Anda.\n\nAnda dapat bertanya tentang:\n• Verifikasi dan detail klaim kreditur\n• Laporan dan analisis rasio keuangan\n• Status dokumen yang telah diunggah\n• Interpretasi UU 37/2004",
+      agent: "lead_orchestrator",
     },
   ]);
   const [message, setMessage] = useState("");
@@ -92,7 +93,7 @@ export function ChatTab({ caseId, onViewSource }: ChatTabProps) {
     // Add empty assistant placeholder
     setMessages((prev) => [
       ...prev,
-      { role: "assistant", content: "", agent: "regulatory_scholar", streaming: true },
+      { role: "assistant", content: "", agent: "lead_orchestrator", streaming: true },
     ]);
 
     try {
@@ -171,13 +172,13 @@ export function ChatTab({ caseId, onViewSource }: ChatTabProps) {
       <div className="px-6 py-4 border-b border-border-default bg-elevated/50 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-accent-blue/10 flex items-center justify-center text-accent-blue shadow-inner shadow-accent-blue/20">
-            <Bot size={20} />
+            <Network size={20} />
           </div>
           <div>
-            <h3 className="text-sm font-black text-text-primary uppercase tracking-tight">Regulatory Scholar</h3>
+            <h3 className="text-sm font-black text-text-primary uppercase tracking-tight">KuratorMind AI Swarm</h3>
             <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="w-2 h-2 rounded-full bg-accent-emerald animate-pulse" />
-                <span className="text-[10px] font-bold text-accent-emerald uppercase tracking-widest">Logic Engine Ready</span>
+                <span className="text-[10px] font-bold text-accent-emerald uppercase tracking-widest">{agentStatus ? "Agent Working..." : "Swarm Engine Ready"}</span>
             </div>
           </div>
         </div>
@@ -363,7 +364,7 @@ function ChatMessage({ m, onViewSource }: { m: LocalMessage, onViewSource: any }
                   {m.agent && (
                       <div className="flex items-center gap-1 opacity-70">
                           <Zap size={10} className="text-accent-blue" />
-                          <span className="text-[9px] font-black text-accent-blue uppercase tracking-widest font-mono">{m.agent}</span>
+                          <span className="text-[9px] font-black text-accent-blue uppercase tracking-widest font-mono">{m.agent.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</span>
                       </div>
                   )}
                   {isBot && !m.streaming && (

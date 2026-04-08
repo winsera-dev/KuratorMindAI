@@ -1,19 +1,22 @@
 #!/bin/bash
 
 # Configuration
-PROJECT_ID="project-dd8617f2-eabd-4715-a8f" # Replace with your project ID
-REGION="asia-southeast1" # Recommended for Indonesia (Jakarta)
+PROJECT_ID="project-dd8617f2-eabd-4715-a8f" 
+REGION="asia-southeast1" 
 SERVICE_NAME_AGENTS="kuratormind-agents"
 SERVICE_NAME_WEB="kuratormind-web"
+REPOSITORY="kuratormind"
+IMAGE_AGENTS="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_NAME_AGENTS"
+IMAGE_WEB="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_NAME_WEB"
 
 echo "🚀 Starting KuratorMind AI Cloud Run Deployment..."
 
 # 1. Deploy Agents (Backend)
 echo "📦 Building and deploying Agents Backend..."
 cd apps/agents
-gcloud builds submit --tag gcr.io/$PROJECT_ID/$SERVICE_NAME_AGENTS .
+gcloud builds submit --tag $IMAGE_AGENTS .
 gcloud run deploy $SERVICE_NAME_AGENTS \
-  --image gcr.io/$PROJECT_ID/$SERVICE_NAME_AGENTS \
+  --image $IMAGE_AGENTS \
   --platform managed \
   --region $REGION \
   --allow-unauthenticated \
@@ -26,11 +29,10 @@ echo "✅ Agents Backend deployed at: $AGENTS_URL"
 # 2. Deploy Web (Frontend)
 echo "📦 Building and deploying Web Frontend..."
 cd ../web
-# Build-time env vars for Next.js
-gcloud builds submit --tag gcr.io/$PROJECT_ID/$SERVICE_NAME_WEB \
-  --substitutions=_AGENT_API_URL=$AGENTS_URL .
+# Build-time env vars for Next.js - Note: substitutions removed as they weren't in template
+gcloud builds submit --tag $IMAGE_WEB .
 gcloud run deploy $SERVICE_NAME_WEB \
-  --image gcr.io/$PROJECT_ID/$SERVICE_NAME_WEB \
+  --image $IMAGE_WEB \
   --platform managed \
   --region $REGION \
   --allow-unauthenticated \
