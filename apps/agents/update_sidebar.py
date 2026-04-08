@@ -1,4 +1,8 @@
-"use client";
+import os
+
+file_path = '../web/src/components/layout/Sidebar.tsx'
+
+content = """\"use client\";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -18,9 +22,9 @@ import { createClient } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
 
 const navItems = [
-  { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Cases", href: "/cases", icon: Briefcase },
-  { name: "System Sync", href: "/case-sync", icon: RefreshCw },
+  { name: "Case Sync", href: "/case-sync", icon: RefreshCw },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -123,3 +127,7 @@ export function Sidebar() {
     </aside>
   );
 }
+"""
+
+with open(file_path, 'w') as f:
+    f.write(content)

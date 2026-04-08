@@ -7,16 +7,16 @@ export default function SettingsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col h-full bg-background p-6 md:p-10 space-y-8 animate-in fade-in duration-500 max-w-6xl mx-auto w-full">
-      <header className="flex flex-col gap-3">
+    <div className="flex flex-col h-full bg-background space-y-6 animate-in fade-in duration-500 max-w-6xl mx-auto w-full">
+      <header className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
-            <span className="w-8 h-1 bg-accent-blue rounded-full" />
-            <h1 className="text-4xl font-black tracking-tight text-white uppercase italic">
+            <span className="w-6 h-1 bg-accent-blue rounded-full" />
+            <h1 className="text-2xl font-black tracking-tight text-white uppercase italic">
             Control Center
             </h1>
         </div>
-        <p className="text-text-muted text-base font-medium max-w-2xl">
-          Authorized personnel only. Configure your forensic identity, global workspace preferences, and security protocols.
+        <p className="text-text-muted text-sm font-medium max-w-2xl">
+          Configure forensic identity, workspace preferences, and security protocols.
         </p>
       </header>
 

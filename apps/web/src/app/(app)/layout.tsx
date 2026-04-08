@@ -25,7 +25,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <main className="flex-1 overflow-y-auto relative bg-[#0A0E1A]">
         {/* subtle gradient overlay for the main content area */}
         <div className="absolute inset-0 bg-gradient-to-br from-accent-blue/5 via-transparent to-transparent pointer-events-none" />
-        <div className="relative z-10 p-8 h-full">
+        <div className="relative z-10 pt-6 px-8 pb-8 h-full">
           {children}
         </div>
       </main>

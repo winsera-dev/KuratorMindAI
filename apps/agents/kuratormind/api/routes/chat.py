@@ -748,7 +748,7 @@ async def chat_sync(request: ChatRequest) -> ChatResponse:
 
         client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
         response = client.models.generate_content(
-            model="gemini-2.0-pro-exp-02-05",
+            model="gemini-2.0-flash",
             contents=[{"role": "USER", "parts": [{"text": request.message}]}],
             config={"system_instruction": system_prompt, "temperature": 0.2},
         )

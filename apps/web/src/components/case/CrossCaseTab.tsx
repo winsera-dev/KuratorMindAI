@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { 
   ShieldAlert, 
   Users, 
@@ -23,10 +23,11 @@ import {
 
 interface CrossCaseTabProps {
   caseId: string;
+  isActive?: boolean;
   onViewEvidence: (evidence: Citation) => void;
 }
 
-export function CrossCaseTab({ caseId, onViewEvidence }: CrossCaseTabProps) {
+export function CrossCaseTab({ caseId, isActive = true, onViewEvidence }: CrossCaseTabProps) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{
     conflicts: AuditFlag[];
@@ -35,7 +36,7 @@ export function CrossCaseTab({ caseId, onViewEvidence }: CrossCaseTabProps) {
   }>({ conflicts: [], entities: [], totalCases: 0 });
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const res = await getGlobalConflicts(caseId);
@@ -46,13 +47,15 @@ export function CrossCaseTab({ caseId, onViewEvidence }: CrossCaseTabProps) {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchData();
   }, [caseId]);
 
-  if (loading) {
+  useEffect(() => {
+    if (isActive && data.totalCases === 0 && !error) {
+        fetchData();
+    }
+  }, [isActive, fetchData, data.totalCases, error]);
+
+  if (loading && isActive) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <Loader2 size={32} className="animate-spin text-accent-cyan mb-4" />
@@ -60,6 +63,8 @@ export function CrossCaseTab({ caseId, onViewEvidence }: CrossCaseTabProps) {
       </div>
     );
   }
+
+  if (!isActive) return null;
 
   // TC-DISC-04: Minimum case guard — cross-case analysis requires 2+ cases
   const isSingleCase = data.totalCases < 2;
@@ -80,7 +85,7 @@ export function CrossCaseTab({ caseId, onViewEvidence }: CrossCaseTabProps) {
         <div className="mt-4 flex flex-col items-center gap-3">
           <p className="text-[10px] font-black uppercase tracking-widest text-text-muted/60">Current Vault: {data.totalCases} Case</p>
           <button
-            onClick={() => window.location.href = "/dashboard"}
+            onClick={() => window.location.href = "/cases"}
             className="px-6 py-2.5 rounded-xl bg-text-primary text-white text-xs font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-black/10"
           >
             Create New Case

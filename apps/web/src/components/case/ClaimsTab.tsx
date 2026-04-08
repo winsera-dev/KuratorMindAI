@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 interface ClaimsTabProps {
   caseId: string;
+  isActive?: boolean;
   isScanningOverride?: boolean;
   onViewEvidence?: (claim: Claim) => void;
 }
@@ -28,7 +29,7 @@ interface ClaimsTabProps {
  * Claims Workspace Container
  * Orchestrates data fetching and top-level filters for the creditor list.
  */
-export function ClaimsTab({ caseId, isScanningOverride, onViewEvidence }: ClaimsTabProps) {
+export function ClaimsTab({ caseId, isActive = true, isScanningOverride, onViewEvidence }: ClaimsTabProps) {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -64,18 +65,23 @@ export function ClaimsTab({ caseId, isScanningOverride, onViewEvidence }: Claims
       setLoading(false);
       setRefreshing(false);
     }
-  }, [caseId]);
+  }, [caseId, isScanningOverride]);
 
   useEffect(() => {
-    fetchData();
+    // Only fetch data if we haven't already or if we are becoming active
+    if (isActive && claims.length === 0 && !error) {
+        fetchData();
+    }
+  }, [isActive, fetchData, claims.length, error]);
 
-    // Set up polling if scanning is active
+  useEffect(() => {
+    // Set up polling ONLY if scanning is active AND the tab is visible
     let interval: NodeJS.Timeout;
-    if (isScanning) {
+    if (isScanning && isActive) {
       interval = setInterval(() => fetchData(true), 3000);
     }
     return () => clearInterval(interval);
-  }, [fetchData, isScanning]);
+  }, [fetchData, isScanning, isActive]);
 
   const handleRefresh = () => {
     setRefreshing(true);

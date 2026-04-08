@@ -122,7 +122,7 @@ export default function CaseWorkspace({
       <header className="flex h-20 items-center justify-between px-6 border-b border-border-default bg-secondary/80 backdrop-blur-md sticky top-0 z-40">
         <div className="flex items-center gap-2 overflow-hidden">
           <Link
-            href="/"
+            href="/cases"
             className="p-1.5 hover:bg-bg-elevated rounded-lg text-text-muted hover:text-text-primary transition-all group shrink-0"
             title="Back to Dashboard"
           >
@@ -219,71 +219,64 @@ export default function CaseWorkspace({
         ))}
       </nav>
 
-      {/* 3. Main Stage */}
+      {/* 3. Main Stage - Performance Optimized: Keep all tabs mounted to avoid remounting delay */}
       <main className="flex-1 overflow-hidden relative">
-        <div className={activeTab === "sources" ? "h-full" : "hidden"}>
-          <SourcesTab caseId={caseId} />
+        <div className={cn("h-full", activeTab !== "sources" && "hidden")}>
+          <SourcesTab caseId={caseId} isActive={activeTab === "sources"} />
         </div>
         
-        <div className={activeTab === "chat" ? "h-full" : "hidden"}>
+        <div className={cn("h-full", activeTab !== "chat" && "hidden")}>
           <ChatTab
               caseId={caseId}
               onViewSource={(citation) => setSelectedEvidence(citation)}
           />
         </div>
 
-        {activeTab === "search" && (
-          <div className="h-full px-8 py-10 bg-primary overflow-y-auto">
-            <DiscoveryTab 
-                caseId={caseId} 
-                onViewEvidence={(ev) => setSelectedEvidence(ev)} 
-            />
-          </div>
-        )}
-
-        {activeTab === "claims" && (
-          <div className="h-full px-6 py-6 bg-primary overflow-y-auto">
-            <ClaimsTab 
+        <div className={cn("h-full px-8 py-10 bg-primary overflow-y-auto", activeTab !== "search" && "hidden")}>
+          <DiscoveryTab 
               caseId={caseId} 
-              isScanningOverride={isCaseScanning}
-              onViewEvidence={(claim) => {
-                if (claim.supporting_documents && claim.supporting_documents.length > 0) {
-                  setSelectedEvidence({
-                    document_id: claim.supporting_documents[0],
-                    file_name: claim.creditor_name,
-                    page: 1,
-                    text_snippet: `Evidence for claim of ${claim.creditor_name}`
-                  });
-                }
-              }}
-            />
-          </div>
-        )}
+              onViewEvidence={(ev) => setSelectedEvidence(ev)} 
+          />
+        </div>
 
-        {activeTab === "audit" && (
-          <div className="h-full px-6 py-6 bg-primary overflow-y-auto">
-            <AuditTab 
-              caseId={caseId} 
-              isScanningOverride={isCaseScanning}
-              onViewEvidence={(ev: Citation) => setSelectedEvidence(ev)}
-            />
-          </div>
-        )}
+        <div className={cn("h-full px-6 py-6 bg-primary overflow-y-auto", activeTab !== "claims" && "hidden")}>
+          <ClaimsTab 
+            caseId={caseId} 
+            isActive={activeTab === "claims"}
+            isScanningOverride={isCaseScanning}
+            onViewEvidence={(claim) => {
+              if (claim.supporting_documents && claim.supporting_documents.length > 0) {
+                setSelectedEvidence({
+                  document_id: claim.supporting_documents[0],
+                  file_name: claim.creditor_name,
+                  page: 1,
+                  text_snippet: `Evidence for claim of ${claim.creditor_name}`
+                });
+              }
+            }}
+          />
+        </div>
+
+        <div className={cn("h-full px-6 py-6 bg-primary overflow-y-auto", activeTab !== "audit" && "hidden")}>
+          <AuditTab 
+            caseId={caseId} 
+            isActive={activeTab === "audit"}
+            isScanningOverride={isCaseScanning}
+            onViewEvidence={(ev: Citation) => setSelectedEvidence(ev)}
+          />
+        </div>
         
-        {activeTab === "intelligence" && (
-          <div className="h-full px-6 py-6 bg-primary overflow-y-auto">
-            <CrossCaseTab 
-              caseId={caseId} 
-              onViewEvidence={(ev: Citation) => setSelectedEvidence(ev)}
-            />
-          </div>
-        )}
+        <div className={cn("h-full px-6 py-6 bg-primary overflow-y-auto", activeTab !== "intelligence" && "hidden")}>
+          <CrossCaseTab 
+            caseId={caseId} 
+            isActive={activeTab === "intelligence"}
+            onViewEvidence={(ev: Citation) => setSelectedEvidence(ev)}
+          />
+        </div>
 
-        {activeTab === "outputs" && (
-          <div className="h-full px-8 py-10 bg-primary overflow-y-auto">
-            <OutputsTab caseId={caseId} documentCount={documentCount} />
-          </div>
-        )}
+        <div className={cn("h-full px-8 py-10 bg-primary overflow-y-auto", activeTab !== "outputs" && "hidden")}>
+          <OutputsTab caseId={caseId} isActive={activeTab === "outputs"} documentCount={documentCount} />
+        </div>
       </main>
 
       {/* 4. Forensic Sidebar (Contextual Drill-down) */}

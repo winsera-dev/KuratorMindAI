@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 
 interface AuditTabProps {
   caseId: string;
+  isActive?: boolean;
   isScanningOverride?: boolean;
   onViewEvidence?: (citation: Citation) => void;
 }
@@ -27,7 +28,7 @@ interface AuditTabProps {
  * Audit Tab Workspace
  * Orchestrates forensic flags, contradictions, and legal monitoring.
  */
-export function AuditTab({ caseId, isScanningOverride, onViewEvidence }: AuditTabProps) {
+export function AuditTab({ caseId, isActive = true, isScanningOverride, onViewEvidence }: AuditTabProps) {
   const [flags, setFlags] = useState<AuditFlag[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -69,18 +70,23 @@ export function AuditTab({ caseId, isScanningOverride, onViewEvidence }: AuditTa
       setLoading(false);
       setRefreshing(false);
     }
-  }, [caseId, severityFilter]);
+  }, [caseId, severityFilter, isScanningOverride]);
 
   useEffect(() => {
-    fetchData();
-    
-    // Set up polling if scanning is active
+    // Only fetch data if we haven't already or if we are becoming active
+    if (isActive && flags.length === 0 && !error) {
+        fetchData();
+    }
+  }, [isActive, fetchData, flags.length, error]);
+  
+  useEffect(() => {
+    // Set up polling ONLY if scanning is active AND the tab is visible
     let interval: NodeJS.Timeout;
-    if (isScanning) {
+    if (isScanning && isActive) {
       interval = setInterval(() => fetchData(true), 3000);
     }
     return () => clearInterval(interval);
-  }, [fetchData, isScanning]);
+  }, [fetchData, isScanning, isActive]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -248,7 +254,7 @@ export function AuditTab({ caseId, isScanningOverride, onViewEvidence }: AuditTa
           <button 
             onClick={() => {
                 // This would navigate to chat with a pre-filled prompt or open a specific report modal
-                window.location.href = `/dashboard/case/${caseId}/chat?trigger=report`;
+                window.location.href = `/case/${caseId}?tab=chat&trigger=report`;
             }}
             className="flex items-center gap-2 px-4 py-2 bg-accent-cyan text-black rounded-xl text-xs font-black hover:bg-accent-cyan/90 transition-all shadow-lg shadow-accent-cyan/20 uppercase tracking-tight active:scale-95"
           >

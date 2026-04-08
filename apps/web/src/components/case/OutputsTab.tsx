@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { 
   getGeneratedOutputs, 
-  generateReport, 
   getOutputSignedUrl,
   streamChat
 } from "@/lib/api";
@@ -38,10 +37,11 @@ const formatDate = (dateStr: string) => {
 
 interface OutputsTabProps {
   caseId: string;
+  isActive?: boolean;
   documentCount?: number;
 }
 
-export function OutputsTab({ caseId, documentCount = 0 }: OutputsTabProps) {
+export function OutputsTab({ caseId, isActive = true, documentCount = 0 }: OutputsTabProps) {
   const [outputs, setOutputs] = useState<GeneratedOutput[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
@@ -63,8 +63,10 @@ export function OutputsTab({ caseId, documentCount = 0 }: OutputsTabProps) {
   }, [caseId]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (isActive && outputs.length === 0 && !error) {
+        fetchData();
+    }
+  }, [isActive, fetchData, outputs.length, error]);
 
   const handleGenerate = async (type: OutputType, title: string) => {
     if (documentCount === 0) return; // guard: no documents

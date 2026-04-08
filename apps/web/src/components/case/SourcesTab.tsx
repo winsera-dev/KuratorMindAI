@@ -22,9 +22,10 @@ import { toast } from "sonner";
 
 interface SourcesTabProps {
   caseId: string;
+  isActive?: boolean;
 }
 
-export function SourcesTab({ caseId }: SourcesTabProps) {
+export function SourcesTab({ caseId, isActive = true }: SourcesTabProps) {
   const [documents, setDocuments] = useState<CaseDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -45,10 +46,12 @@ export function SourcesTab({ caseId }: SourcesTabProps) {
     }
   }, [caseId]);
 
-  // Initial load
+  // Initial load - only if active or first time
   useEffect(() => {
-    fetchDocuments();
-  }, [fetchDocuments]);
+    if (isActive && documents.length === 0 && !error) {
+        fetchDocuments();
+    }
+  }, [isActive, fetchDocuments, documents.length, error]);
 
   // Poll for status changes when any document is processing
   useEffect(() => {
@@ -56,7 +59,8 @@ export function SourcesTab({ caseId }: SourcesTabProps) {
       (d) => d.status === "processing" || d.status === "pending"
     );
 
-    if (hasProcessing) {
+    // Only poll if tab is active and has processing docs
+    if (hasProcessing && isActive) {
       if (!pollRef.current) {
         pollRef.current = setInterval(fetchDocuments, 3000);
       }
@@ -73,7 +77,7 @@ export function SourcesTab({ caseId }: SourcesTabProps) {
         pollRef.current = null;
       }
     };
-  }, [documents, fetchDocuments]);
+  }, [documents, fetchDocuments, isActive]);
 
   const handleFiles = async (files: FileList | File[]) => {
     const fileArr = Array.from(files);

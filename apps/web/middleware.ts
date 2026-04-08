@@ -41,7 +41,7 @@ export async function middleware(request: NextRequest) {
 
     const isProtectedRoute = 
       request.nextUrl.pathname.startsWith("/dashboard") || 
-      request.nextUrl.pathname.startsWith("/vault") ||
+      request.nextUrl.pathname.startsWith("/cases") ||
       request.nextUrl.pathname.startsWith("/case-sync") ||
       request.nextUrl.pathname.startsWith("/settings");
                              

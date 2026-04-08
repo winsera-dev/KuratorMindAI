@@ -21,10 +21,10 @@ export const metadata: Metadata = {
     "A multi-agent AI workspace for Indonesian Kurators. Upload case data, verify creditor claims, map debts, and generate court-ready reports — all grounded in your evidence.",
   icons: {
     icon: [
-      { url: "/brand/logo-icon.svg?v=5", type: "image/svg+xml" },
+      { url: "/brand/favicon-removebg-preview.svg", type: "image/svg+xml" },
     ],
-    shortcut: "/brand/logo-icon.svg?v=5",
-    apple: "/brand/logo-icon.svg?v=5",
+    shortcut: "/brand/favicon-removebg-preview.svg",
+    apple: "/brand/favicon-removebg-preview.svg",
   },
   keywords: [
     "kurator",

@@ -24,8 +24,9 @@ def get_current_user(auth: Optional[HTTPAuthorizationCredentials] = Depends(secu
     auth_enabled = os.environ.get("AUTH_ENABLED", "false").lower() == "true"
     
     if not auth_enabled:
-        # Default system UUID for development
-        return "00000000-0000-0000-0000-000000000000"
+        # Return a valid user ID for local development to avoid FK violations
+        # This ID is verified to exist in the database
+        return os.environ.get("DEV_USER_ID", "d1122f85-142f-411b-879f-7d15998f3304")
 
     if not auth:
         raise HTTPException(

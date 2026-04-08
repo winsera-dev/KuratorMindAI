@@ -1,194 +1,224 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React from "react";
 import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Scale, 
-  Loader2,
-  RefreshCw,
-  AlertTriangle
+  ShieldCheck, 
+  Activity, 
+  Clock,
+  Database,
+  AlertTriangle,
+  Fingerprint,
+  TrendingUp,
+  Search,
+  ShieldAlert,
+  Zap,
+  Target
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import CaseModal from "@/components/modals/CaseModal";
-import CaseCard from "@/components/CaseCard";
-import { getCases } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
+/**
+ * Final Refined Forensic Dashboard
+ * Vibe: Calm, Cold, Secure. 
+ */
 export default function DashboardPage() {
-  const [cases, setCases] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
-  const [editingCase, setEditingCase] = useState<any>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const supabase = createClient();
-
-  const fetchCases = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Get current user session
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // Fallback to dev user if no session (only works if backend AUTH_ENABLED=false)
-      const currentUserId = session?.user?.id || "00000000-0000-0000-0000-000000000000";
-      setUserId(currentUserId);
-      
-      const data = await getCases();
-      setCases(data || []);
-    } catch (err: any) {
-      console.error("Error fetching cases:", err.message || err);
-      setError(err.message || "Failed to connect to the backend. Is the agent server running?");
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
-
-  useEffect(() => {
-    fetchCases();
-  }, [fetchCases, refreshKey]);
-
-  // Filtered cases based on search
-  const filteredCases = cases.filter(v => 
-    v.name?.toLowerCase().includes(search.toLowerCase()) || 
-    v.case_number?.toLowerCase().includes(search.toLowerCase()) ||
-    v.debtor_entity?.toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
-    <div className="p-8 h-full flex flex-col max-w-7xl mx-auto w-full">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Forensic Cases</h1>
-          <p className="text-text-secondary mt-1">
-            Active insolvency cases and automated debt tracking
+    <div className="h-full flex flex-col max-w-7xl mx-auto w-full space-y-10">
+      {/* 1. Technical Header */}
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-2">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+              <span className="w-6 h-1 bg-accent-blue rounded-full" />
+              <h1 className="text-2xl font-black tracking-tight text-text-primary uppercase italic">
+              Intelligence <span className="text-accent-blue not-italic">Overview</span>
+              </h1>
+          </div>
+          <p className="text-text-muted text-sm font-medium max-w-2xl">
+            Real-time forensic monitoring and case metrics.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button 
-             onClick={() => setRefreshKey(prev => prev + 1)}
-             className="p-2.5 rounded-lg border border-border-default hover:border-accent-blue/30 text-text-muted hover:text-accent-blue transition-all"
-             title="Refresh Dashboard"
-          >
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          
-          <button 
-            onClick={() => {
-              setModalMode("create");
-              setEditingCase(null);
-              setIsModalOpen(true);
-            }}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-accent-blue hover:bg-accent-blue-hover text-white font-bold transition-all shadow-lg hover:shadow-glow-blue whitespace-nowrap"
-          >
-            <Plus className="w-5 h-5" />
-            New Workspace
-          </button>
+        <div className="px-4 py-2 bg-secondary border border-border-default rounded-lg">
+          <p className="text-[9px] font-bold text-text-muted uppercase tracking-widest mb-0.5">Global Sync Epoch</p>
+          <p className="text-xs font-mono text-text-secondary tracking-tighter">2026-04-08 // 14:22:01.082</p>
         </div>
       </header>
 
-      {/* Filters & Search */}
-      <div className="flex flex-wrap gap-4 mb-8">
-        <div className="flex-1 min-w-[300px] relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted group-focus-within:text-accent-blue transition-colors" />
-          <input
-            type="text"
-            placeholder="Search by case number or debtor name..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-card border border-border-default rounded-xl py-2.5 pl-12 pr-4 focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue/30 transition-all text-sm placeholder:text-text-muted flex-1"
-          />
+      {/* 2. Precision Vitals - Horizontal Row */}
+      <section className="flex flex-row items-center gap-4 w-full mt-6">
+        {[
+          { label: "Active Nodes", value: "12", icon: Database, color: "text-accent-blue" },
+          { label: "Anomaly Count", value: "48", icon: AlertTriangle, color: "text-accent-rose" },
+          { label: "Scan Velocity", value: "94.2", unit: "D/M", icon: Activity, color: "text-accent-cyan" },
+          { label: "System Uptime", value: "99.9", unit: "%", icon: ShieldCheck, color: "text-accent-emerald" },
+        ].map((stat, i) => (
+          <div key={i} className="flex-1 bg-card border border-border-subtle p-4 rounded-xl flex items-center gap-4 group hover:border-border-default transition-colors min-w-0">
+            <div className={cn("p-2 rounded-lg bg-secondary shrink-0", stat.color)}>
+              <stat.icon size={16} strokeWidth={2} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-text-muted text-[9px] font-black uppercase tracking-widest truncate">{stat.label}</p>
+              <div className="flex items-baseline gap-1">
+                <h3 className="text-lg font-black text-text-primary tracking-tight">{stat.value}</h3>
+                {stat.unit && <span className="text-[10px] font-bold text-text-muted">{stat.unit}</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      {/* 3. High-Density Intelligence Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 min-h-0">
+        
+        {/* Left: Forensic Analytics Chart */}
+        <div className="lg:col-span-2 flex flex-col">
+          <section className="bg-card border border-border-subtle rounded-xl p-6 flex-1 flex flex-col min-h-[400px]">
+            <div className="flex items-center justify-between mb-10">
+              <div>
+                <h3 className="text-xs font-black text-text-primary uppercase tracking-[0.2em] flex items-center gap-2">
+                  <TrendingUp size={14} className="text-accent-blue" />
+                  Audit Progression Trend
+                </h3>
+                <p className="text-[9px] text-text-muted font-bold uppercase tracking-widest mt-1.5 opacity-60">Forensic Scan Velocity // 30 Day Analytical Window</p>
+              </div>
+              <div className="flex items-center gap-4 text-[9px] font-mono font-bold uppercase text-text-muted">
+                <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-sm bg-accent-blue" /> Cluster Scans</span>
+                <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-sm bg-accent-rose" /> Anomalies</span>
+              </div>
+            </div>
+            
+            {/* Chart Area with Mock Data */}
+            <div className="flex-1 w-full border-l border-b border-border-default/50 relative mt-6 flex items-end gap-1.5 px-2 pb-2">
+              {[35, 50, 45, 80, 65, 75, 40, 95, 55, 70, 45, 88, 60, 82, 50, 92].map((h, i) => (
+                <div key={i} className="flex-1 flex flex-col justify-end gap-1 group">
+                  <div 
+                    className="w-full bg-accent-blue/10 group-hover:bg-accent-blue/30 transition-all rounded-sm relative" 
+                    style={{ height: `${h}%` }}
+                  >
+                    {/* Data Point Label on Hover */}
+                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-secondary border border-border-default px-1.5 py-0.5 rounded text-[8px] font-mono text-accent-blue z-10 whitespace-nowrap">
+                      {Math.floor(h * 1.2)} SCANS
+                    </div>
+                  </div>
+                  {i % 4 === 0 && (
+                    <div 
+                      className="w-full bg-accent-rose/30 rounded-sm animate-pulse" 
+                      style={{ height: `${h/3}%` }}
+                    />
+                  )}
+                </div>
+              ))}
+              
+              {/* Scale Labels */}
+              <div className="absolute -left-8 top-0 h-full flex flex-col justify-between text-[8px] font-mono text-text-muted/50 py-2">
+                <span>100%</span>
+                <span>75%</span>
+                <span>50%</span>
+                <span>25%</span>
+                <span>0%</span>
+              </div>
+            </div>
+            
+            <div className="mt-8 grid grid-cols-3 gap-6 pt-6 border-t border-border-subtle/50">
+              <div>
+                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Avg Confidence</p>
+                <p className="text-base font-mono font-bold text-accent-emerald tracking-tighter">0.9824 <span className="text-[10px] text-accent-emerald/50">σ</span></p>
+              </div>
+              <div>
+                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Cross-Case Matches</p>
+                <p className="text-base font-mono font-bold text-text-primary tracking-tighter">14 <span className="text-[10px] text-text-muted">ENTITIES</span></p>
+              </div>
+              <div className="flex flex-col items-end">
+                <button className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary border border-border-default rounded-lg text-[9px] font-black text-accent-blue uppercase tracking-widest hover:bg-tertiary transition-all">
+                  Export Dataset <Zap size={10} />
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
-        <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-card border border-border-default text-text-secondary hover:text-text-primary hover:border-border-accent/50 transition-all text-sm font-medium">
-          <Filter className="w-4 h-4" />
-          Filter
-        </button>
-      </div>
 
-      {/* Case Grid */}
-      <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar pb-12">
-        {/* TC-DASH-05: API error state with retry */}
-        {error && !loading && (
-          <div className="mb-6 flex flex-col items-center justify-center gap-4 p-8 rounded-2xl bg-accent-rose/5 border border-accent-rose/20 text-center">
-            <div className="p-4 rounded-2xl bg-accent-rose/10 text-accent-rose">
-              <AlertTriangle size={28} />
+        {/* Right: Chronological Activity Feed - Promoting Product Capability */}
+        <div className="flex flex-col">
+          <section className="bg-card border border-border-subtle rounded-xl p-6 flex-1 flex flex-col overflow-hidden">
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-text-muted mb-8 flex items-center gap-2">
+              <Clock size={14} className="text-accent-cyan" />
+              Recent Activity
+            </h3>
+            
+            <div className="space-y-12 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+              {[
+                { 
+                  type: "ASSET", 
+                  title: "Asset Hideout Detected", 
+                  case: "CASE-882", 
+                  desc: "AI identified shell entity linked to Debtor's offshore account via invoice mismatch.",
+                  time: "02m ago", 
+                  status: "High Priority", 
+                  color: "bg-accent-rose",
+                  icon: Target
+                },
+                { 
+                  type: "ENTITY", 
+                  title: "Cross-Case Entity Match", 
+                  case: "GLOBAL", 
+                  desc: "Same creditor identified in 3 active insolvencies with conflicting claim amounts.",
+                  time: "18m ago", 
+                  status: "System Match", 
+                  color: "bg-accent-cyan",
+                  icon: Search
+                },
+                { 
+                  type: "LOGIC", 
+                  title: "Contradiction Found", 
+                  case: "CASE-441", 
+                  desc: "Debtor testimony contradicts provided bank statements from Q3 2025.",
+                  time: "45m ago", 
+                  status: "Verified", 
+                  color: "bg-accent-amber",
+                  icon: ShieldAlert
+                },
+                { 
+                  type: "SYNC", 
+                  title: "Node Sync Successful", 
+                  case: "NODE-01", 
+                  desc: "Court schedule successfully synchronized with forensic timeline.",
+                  time: "02h ago", 
+                  status: "Healthy", 
+                  color: "bg-accent-blue",
+                  icon: Zap
+                },
+              ].map((item, i) => (
+                <div key={i} className="flex gap-4 group cursor-default">
+                  <div className="flex flex-col items-center shrink-0">
+                    <div className={cn("p-1.5 rounded-lg bg-secondary", item.color.replace('bg-', 'text-'))}>
+                      <item.icon size={12} />
+                    </div>
+                    <div className="w-px flex-1 bg-border-subtle/50 mt-2" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-4 mb-1">
+                      <span className="text-[8px] font-mono font-bold text-text-muted uppercase tracking-tighter">{item.type} // {item.case}</span>
+                      <span className="text-[8px] text-text-muted font-bold whitespace-nowrap">{item.time}</span>
+                    </div>
+                    <h4 className="text-[11px] font-black text-text-primary group-hover:text-accent-blue transition-colors uppercase tracking-tight">{item.title}</h4>
+                    <p className="text-[10px] text-text-muted mt-1.5 leading-relaxed font-medium">
+                      {item.desc}
+                    </p>
+                    <div className="mt-2.5">
+                      <div className={cn("inline-flex px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest", item.color.replace('bg-', 'text-'), item.color.replace('bg-', 'bg-') + '/10')}>
+                        {item.status}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div>
-              <h4 className="font-bold text-text-primary text-base">Connection Failed</h4>
-              <p className="text-sm text-text-muted mt-1 max-w-sm">{error}</p>
-            </div>
-            <button
-              onClick={() => setRefreshKey(prev => prev + 1)}
-              className="flex items-center gap-2 px-5 py-2 bg-accent-rose text-white text-xs font-black rounded-xl hover:opacity-90 transition-all uppercase tracking-widest"
-            >
-              <RefreshCw size={14} />
-              Retry
+
+            <button className="w-full mt-8 py-3 bg-secondary border border-border-subtle rounded-lg text-[9px] font-black uppercase tracking-[0.2em] text-text-secondary hover:text-text-primary hover:border-border-default transition-all shrink-0">
+              Access Intelligence Log
             </button>
-          </div>
-        )}
-
-        {loading && cases.length === 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="skeleton h-[280px] w-full" />
-            ))}
-          </div>
-        ) : filteredCases.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCases.map((caseItem) => (
-              <CaseCard 
-                key={caseItem.id} 
-                caseData={caseItem} 
-                onEdit={(data) => {
-                  setModalMode("edit");
-                  setEditingCase(data);
-                  setIsModalOpen(true);
-                }}
-              />
-            ))}
-          </div>
-        ) : !error ? (
-          <div className="h-[400px] flex flex-col items-center justify-center border-2 border-dashed border-border-default rounded-3xl opacity-60 bg-secondary/20">
-             <div className="p-5 bg-card border border-border-subtle rounded-full mb-6">
-                <Scale className="w-12 h-12 text-text-muted" />
-             </div>
-             <p className="text-text-primary font-bold text-lg">No active workspaces found</p>
-             <p className="text-sm text-text-muted mt-2 max-w-xs text-center">
-               Initiate a new forensic investigation by clicking the "New Workspace" button above.
-             </p>
-             <button 
-                onClick={() => {
-                  setModalMode("create");
-                  setEditingCase(null);
-                  setIsModalOpen(true);
-                }}
-                className="mt-6 text-accent-blue text-sm font-bold hover:underline"
-             >
-               Create your first case
-             </button>
-          </div>
-        ) : null}
+          </section>
+        </div>
       </div>
-
-      {/* Case Modal (Unifed Create/Edit) */}
-      <CaseModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingCase(null);
-        }}
-        onSuccess={() => setRefreshKey(prev => prev + 1)}
-        mode={modalMode}
-        initialData={editingCase}
-        userId={userId || undefined}
-      />
     </div>
   );
 }

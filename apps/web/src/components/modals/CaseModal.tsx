@@ -194,7 +194,7 @@ export default function CaseModal({
       onClose();
       // Redirect to dashboard if we are on the case page
       if (window.location.pathname.includes('/case/')) {
-        window.location.href = '/dashboard';
+        window.location.href = '/cases';
       }
     } catch (err: any) {
       setError(err.message || "Failed to delete case");
