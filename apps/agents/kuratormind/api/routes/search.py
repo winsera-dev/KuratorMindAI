@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request as FastAPIRequest
 from pydantic import BaseModel  # type: ignore
 from supabase import create_client, Client # type: ignore
 from kuratormind.api.deps import get_current_user
-from kuratormind.api.limiter import limiter
+from kuratormind.api.limiter import limiter, LIMIT_SEARCH
 from kuratormind.tools.supabase_tools import semantic_search # type: ignore
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def _get_supabase() -> Client:
 # ------------------------------------------------------------
 
 @router.post("/search", response_model=SearchResponse)
-@limiter.limit("30/minute")
+@limiter.limit(LIMIT_SEARCH)
 async def case_search(
     request: FastAPIRequest,
     search_request: SearchRequest,

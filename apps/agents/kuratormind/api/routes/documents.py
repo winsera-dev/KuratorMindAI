@@ -14,7 +14,8 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, Request as FastAPIRequest
 from supabase import create_client, Client
 from kuratormind.api.deps import get_current_user
-from kuratormind.api.limiter import limiter
+from kuratormind.services.security import calculate_forensic_hash
+from kuratormind.api.limiter import limiter, LIMIT_INGESTION
 from kuratormind.services.ingestion import ingest_document
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ def _get_supabase() -> Client:
 
 
 @router.post("/documents/upload")
-@limiter.limit("20/minute")
+@limiter.limit(LIMIT_INGESTION)
 async def upload_document(
     request: FastAPIRequest,
     background_tasks: BackgroundTasks,
@@ -88,7 +89,12 @@ async def upload_document(
     import re
     import hashlib
     sb = _get_supabase()
-    
+
+    # T-05 FIX: Verify the target case belongs to the authenticated user
+    target_case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+    if not target_case.data or target_case.data.get("user_id") != current_user:
+        raise HTTPException(status_code=403, detail="Access denied to this case.")
+
     # Check for duplicate file using SHA-256
     file_hash = hashlib.sha256(file_bytes).hexdigest()
     existing = sb.table("case_documents").select("id").eq("case_id", case_id).eq("metadata->>file_hash", file_hash).execute()
@@ -183,6 +189,7 @@ async def list_documents(
                 "file_path, file_size, metadata, created_at"
             )
             .eq("case_id", case_id)
+            .is_("deleted_at", "null")
             .order("created_at", desc=True)
             .execute()
         )
@@ -219,46 +226,58 @@ async def delete_document(
         storage_path = doc.data.get("file_path")
         case_id = doc.data.get("case_id")
 
-        # Delete chunks
-        sb.table("document_chunks").delete().eq("document_id", document_id).execute()
+        # T-18 FIX: Soft-delete strategy to prevent evidence spoliation
+        from datetime import datetime, timezone
+        now_str = datetime.now(timezone.utc).isoformat()
+        
+        # 1. Soft-delete the document
+        sb.table("case_documents").update({"deleted_at": now_str}).eq("id", document_id).execute()
+        
+        doc_hash = calculate_forensic_hash(document_id, current_user, "deleted", new_value={"deleted_at": now_str})
+        sb.table("forensic_audit_log").insert({
+            "entity_type": "document", "entity_id": document_id, 
+            "action": "deleted", "actor_type": "user", "actor_id": current_user,
+            "evidence_hash": doc_hash
+        }).execute()
 
-        # Delete derived findings (Claims and Audit Flags)
+        # 2. Soft-delete derived findings (Claims and Audit Flags)
         try:
-            # 1. Robust Cleanup for Claims
-            # We fetch IDs first to ensure we catch all matches in the JSONB metadata
             claims_to_del = sb.table("claims").select("id").eq("metadata->>source_document_id", document_id).execute()
             for c in claims_to_del.data:
-                sb.table("claims").delete().eq("id", c["id"]).execute()
+                sb.table("claims").update({"deleted_at": now_str}).eq("id", c["id"]).execute()
+                
+                claim_hash = calculate_forensic_hash(c["id"], current_user, "deleted", new_value={"deleted_at": now_str})
+                sb.table("forensic_audit_log").insert({
+                    "entity_type": "claim", "entity_id": c["id"], 
+                    "action": "deleted", "actor_type": "system", "actor_id": current_user,
+                    "evidence_hash": claim_hash
+                }).execute()
             
-            # 2. Robust Cleanup for Audit Flags
-            # We fetch all flags for the case and manually filter in Python to be 100% sure
             if case_id:
                 flags_res = sb.table("audit_flags").select("id, evidence").eq("case_id", case_id).execute()
                 for f in flags_res.data:
                     evidence = f.get("evidence") or []
-                    # Check if any evidence item links to this document
                     is_linked = any(
                         isinstance(e, dict) and e.get("source_document_id") == document_id 
                         for e in evidence
                     )
                     if is_linked:
-                        sb.table("audit_flags").delete().eq("id", f["id"]).execute()
+                        sb.table("audit_flags").update({"deleted_at": now_str}).eq("id", f["id"]).execute()
+                        
+                        flag_hash = calculate_forensic_hash(f["id"], current_user, "deleted", new_value={"deleted_at": now_str})
+                        sb.table("forensic_audit_log").insert({
+                            "entity_type": "audit_flag", "entity_id": f["id"], 
+                            "action": "deleted", "actor_type": "system", "actor_id": current_user,
+                            "evidence_hash": flag_hash
+                        }).execute()
             
-            logger.info("Systemic cleanup complete for document %s", document_id)
+            logger.info("Systemic soft-cleanup complete for document %s", document_id)
         except Exception as cleanup_exc:
-            logger.warning("Systemic cleanup failed: %s", cleanup_exc)
+            logger.warning("Systemic soft-cleanup failed: %s", cleanup_exc)
 
-        # Delete from storage
-        if storage_path:
-            try:
-                sb.storage.from_("case-files").remove([storage_path])
-            except Exception as exc_storage:
-                logger.warning("Storage deletion failed (continuing): %s", exc_storage)
+        # Do NOT delete from storage or chunks to maintain full forensic recovery capability.
 
-        # Delete the document record
-        sb.table("case_documents").delete().eq("id", document_id).execute()
-
-        return {"success": True, "deleted_document_id": document_id}
+        return {"success": True, "deleted_document_id": document_id, "message": "Document and dependencies soft-deleted."}
 
     except HTTPException:
         raise
@@ -278,16 +297,27 @@ async def get_document_signed_url(
     """
     sb = _get_supabase()
     try:
-        # Fetch the document record for the storage path
+        # Fetch the document record including case_id for ownership check
         doc = (
             sb.table("case_documents")
-            .select("file_path, file_name, file_type")
+            .select("file_path, file_name, file_type, case_id")
             .eq("id", document_id)
             .single()
             .execute()
         )
         if not doc.data:
             raise HTTPException(status_code=404, detail="Document not found.")
+
+        # T-04 FIX: Verify the parent case belongs to the requesting user
+        case = (
+            sb.table("cases")
+            .select("user_id")
+            .eq("id", doc.data["case_id"])
+            .maybe_single()
+            .execute()
+        )
+        if not case.data or case.data.get("user_id") != current_user:
+            raise HTTPException(status_code=403, detail="Access denied.")
 
         file_path = doc.data.get("file_path")
         if not file_path:

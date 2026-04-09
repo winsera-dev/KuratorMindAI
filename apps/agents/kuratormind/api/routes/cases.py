@@ -185,17 +185,23 @@ async def get_case_stats(
     try:
         # System Case Bypass: Always allow the global case stats
         GLOBAL_ID = "00000000-0000-0000-0000-000000000000"
-        
+
+        # T-06 FIX: Verify case ownership before returning stats
+        if case_id != GLOBAL_ID:
+            case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+            if not case.data or case.data.get("user_id") != current_user:
+                raise HTTPException(status_code=403, detail="Access denied to this case.")
+
         # 1. Document Count
-        docs = sb.table("case_documents").select("id", count="exact").eq("case_id", case_id).execute()
+        docs = sb.table("case_documents").select("id", count="exact").eq("case_id", case_id).is_("deleted_at", "null").execute()
         doc_count = docs.count if docs.count is not None else 0
 
         # 2. Total Claims Sum
-        claims = sb.table("claims").select("claim_amount").eq("case_id", case_id).execute()
+        claims = sb.table("claims").select("claim_amount").eq("case_id", case_id).is_("deleted_at", "null").execute()
         total_claims = sum(float(c["claim_amount"] or 0) for c in claims.data)
 
         # 3. Flag Count (Unresolved)
-        flags = sb.table("audit_flags").select("id", count="exact").eq("case_id", case_id).eq("resolved", False).execute()
+        flags = sb.table("audit_flags").select("id", count="exact").eq("case_id", case_id).eq("resolved", False).is_("deleted_at", "null").execute()
         flag_count = flags.count if flags.count is not None else 0
 
         return CaseStats(

@@ -13,7 +13,6 @@ export async function streamChat(
     case_id: string;
     session_id: string;
     message: string;
-    user_id?: string;
     agent_override?: string;
   },
   callbacks: {

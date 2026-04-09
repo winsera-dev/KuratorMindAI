@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
 from kuratormind.api.deps import get_current_user
+from kuratormind.services.security import calculate_forensic_hash
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -75,7 +76,7 @@ async def list_audit_flags(
         if not case.data or case.data.get("user_id") != current_user:
             raise HTTPException(status_code=403, detail="Access denied to this case.")
 
-    query = sb.table("audit_flags").select("*").eq("case_id", case_id)
+    query = sb.table("audit_flags").select("*").eq("case_id", case_id).is_("deleted_at", "null")
     
     if severity:
         query = query.eq("severity", severity)
@@ -99,6 +100,7 @@ async def update_audit_flag(
     """Update flag resolution status or notes."""
     sb = _get_supabase()
     update_data = updates.dict(exclude_unset=True)
+    update_data["created_by"] = current_user
     
     try:
         # Verify flag exists and belongs to user's case
@@ -116,7 +118,20 @@ async def update_audit_flag(
             .execute()
             
         if not result.data:
-            raise HTTPException(status_code=500, detail="Failed to update audit flag.")
+            raise HTTPException(status_code=500, detail="Failed to update flag.")
+
+        # T-19: Log the forensic update with an integrity hash
+        try:
+            old_val = {k: existing.data[k] for k in update_data.keys() if k in existing.data}
+            flag_hash = calculate_forensic_hash(flag_id, current_user, "updated", old_value=old_val, new_value=update_data)
+            sb.table("forensic_audit_log").insert({
+                "entity_type": "audit_flag", "entity_id": flag_id, 
+                "action": "updated", "actor_type": "user", "actor_id": current_user,
+                "old_value": old_val, "new_value": update_data,
+                "evidence_hash": flag_hash
+            }).execute()
+        except Exception as log_exc:
+            logger.warning("Forensic logging failed: %s", log_exc)
             
         return result.data[0]
     except HTTPException:

@@ -21,7 +21,9 @@ def get_current_user(auth: Optional[HTTPAuthorizationCredentials] = Depends(secu
     FastAPI dependency to verify a Supabase JWT using the Supabase SDK.
     If AUTH_ENABLED=false, returns a default system UUID for local development.
     """
-    auth_enabled = os.environ.get("AUTH_ENABLED", "false").lower() == "true"
+    # SECURITY: Default to TRUE — a missing env var must be SECURE, not open.
+    # Explicitly set AUTH_ENABLED=false in your local .env for dev mode.
+    auth_enabled = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
     
     if not auth_enabled:
         # Return a valid user ID for local development to avoid FK violations

@@ -422,10 +422,29 @@ def scrape_and_index_regulation(url: str, title: str) -> dict:
     from kuratormind.services.ingestion import ingest_document # type: ignore
     import uuid
     import requests # type: ignore
+    from urllib.parse import urlparse
+    import socket
     
     try:
         sb = _get_supabase()
         
+        # T-15, T-16 FIX: Validate URL to prevent SSRF and indexing malicious precedents
+        parsed_url = urlparse(url)
+        domain = parsed_url.hostname
+        if not domain:
+            return {"error": "Invalid URL provided."}
+            
+        ALLOWED_DOMAINS = ["ojk.go.id", "jdih.kemenkeu.go.id", "bphn.go.id", "mahkamahagung.go.id", "peraturan.go.id"]
+        if not any(domain.endswith(d) for d in ALLOWED_DOMAINS):
+            return {"error": f"Domain {domain} is not an authorized official legal source."}
+            
+        try:
+            ip = socket.gethostbyname(domain)
+            if ip.startswith("127.") or ip.startswith("10.") or ip.startswith("192.168.") or ip.startswith("169.254.") or ip.startswith("::1"):
+                return {"error": "Invalid domain resolution (SSRF protection)."}
+        except socket.error:
+            return {"error": "Failed to resolve domain."}
+
         # 1. Download file content
         response = requests.get(url, timeout=30)
         if response.status_code != 200:
@@ -555,15 +574,16 @@ def save_generated_output(
         return {"error": str(e), "output": None}
 
 
-def global_semantic_search(query: str, top_k: int = 10, exclude_case_id: str | None = None) -> dict:
-    """Perform semantic search across ALl document chunks in the entire database.
+def global_semantic_search(query: str, current_case_id: str, top_k: int = 10) -> dict:
+    """Perform semantic search across document chunks in the user's cases.
 
-    Useful for finding precedents, similar cases, or cross-case evidence.
+    Useful for finding precedents, similar cases, or cross-case evidence within
+    the user's own portfolio. Note: T-08 fix ensures tenant isolation.
 
     Args:
         query: The natural language query to search for.
+        current_case_id: The ID of the case you are currently analyzing.
         top_k: Maximum number of results to return.
-        exclude_case_id: Optional ID to exclude from results (e.g. current case).
 
     Returns:
         Matches including case_id for cross-referencing.
@@ -581,13 +601,21 @@ def global_semantic_search(query: str, top_k: int = 10, exclude_case_id: str | N
         )
         query_embedding: list[float] = embed_result.embeddings[0].values
 
+        # Fetch user_id from current_case_id to establish tenant boundary
+        case_res = sb.table("cases").select("user_id").eq("id", current_case_id).execute()
+        if not case_res.data:
+            return {"error": "Invalid current_case_id provided.", "results": []}
+            
+        user_id = case_res.data[0]["user_id"]
+
         result = sb.rpc(
-            "match_global_chunks",
+            "match_global_chunks_by_user",
             {
                 "query_embedding": query_embedding,
+                "user_id_param": user_id,
                 "match_count": top_k,
                 "match_threshold": 0.1,
-                "exclude_case_id": exclude_case_id
+                "exclude_case_id": current_case_id
             },
         ).execute()
 
@@ -645,10 +673,11 @@ def resolve_global_entity(name: str, entity_type: str, case_id: str, source_id: 
             other_vaults = sb.table("entity_occurrences").select("case_id").eq("entity_id", entity_id).neq("case_id", case_id).execute()
             has_conflict = len(other_vaults.data) > 0
             
+            # T-09 FIX: We purposefully DO NOT return len(other_vaults.data) to avoid leaking
+            # metadata about the scale of other confidential cases.
             return {
                 "entity_id": entity_id, 
-                "has_conflict": has_conflict, 
-                "other_vault_count": len(other_vaults.data)
+                "has_conflict": has_conflict
             }
             
         return {"error": "Failed to resolve entity"}

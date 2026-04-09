@@ -14,6 +14,7 @@ import os
 import uuid
 import asyncio
 from typing import Any, AsyncGenerator, Annotated, cast
+from typing import Any, AsyncGenerator, Annotated, cast, Optional
 
 from fastapi import APIRouter, Depends, HTTPException  # type: ignore
 from fastapi import Request as FastAPIRequest  # type: ignore
@@ -22,7 +23,8 @@ from sse_starlette.sse import EventSourceResponse  # type: ignore
 from google import genai  # type: ignore
 from supabase import create_client  # type: ignore
 from kuratormind.api.deps import get_current_user
-from kuratormind.api.limiter import limiter
+from kuratormind.api.limiter import limiter, LIMIT_CHAT
+from kuratormind.services.security import encrypt_pii, decrypt_pii, sanitize_chat_input  # type: ignore
 
 from kuratormind.tools.supabase_tools import (
     semantic_search,
@@ -47,10 +49,9 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     """Request body for the chat endpoint."""
     case_id: str
-    session_id: str | None = None
+    session_id: Optional[str] = None
     message: str
-    user_id: str | None = None
-    agent_override: str | None = None
+    agent_override: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -280,8 +281,8 @@ def _route_to_agent(
 
 
 @router.post("/chat")
-@limiter.limit("20/minute")
-async def chat(
+@limiter.limit(LIMIT_CHAT)
+async def chat_stream(
     request: FastAPIRequest,
     chat_request: ChatRequest,
     current_user: Annotated[str, Depends(get_current_user)],
@@ -354,10 +355,11 @@ async def chat(
                     }
                     return
 
-            # 4. Fetch case document context (RAG)
+            # 4. Sanitize and fetch case document context (RAG)
+            sanitized_message = sanitize_chat_input(chat_request.message)
             case_context, retrieved_chunks = "", []
             if sb:
-                case_context, retrieved_chunks = _fetch_case_context(sb, chat_request.case_id, chat_request.message)
+                case_context, retrieved_chunks = _fetch_case_context(sb, chat_request.case_id, sanitized_message)
 
             # 4. Build chat history for multi-turn context
             history: list[dict] = []
@@ -389,7 +391,7 @@ async def chat(
                     {"role": role, "parts": [{"text": msg["content"]}]}
                 )
             contents.append(
-                {"role": "USER", "parts": [{"text": chat_request.message}]}
+                {"role": "USER", "parts": [{"text": sanitized_message}]}
             )
 
             yield {
@@ -707,16 +709,20 @@ async def chat(
 
 
 @router.post("/chat/sync")
-async def chat_sync(request: ChatRequest) -> ChatResponse:
+async def chat_sync(
+    request: ChatRequest,
+    current_user: Annotated[str, Depends(get_current_user)],
+) -> ChatResponse:
     """Non-streaming chat. Returns the full response at once."""
     try:
         sb = _get_supabase()
         case_context = ""
+        sanitized_message = sanitize_chat_input(request.message)
         if sb:
-            # _upsert_session returns sanitized UUID
-            session_id = _upsert_session(sb, request.session_id, request.case_id, request.user_id)
-            _save_message(sb, session_id, request.case_id, "user", request.message)
-            case_context = _fetch_case_context(sb, request.case_id, request.message)
+            # T-20: Rely on authenticated current_user from JWT
+            session_id = _upsert_session(sb, request.session_id, request.case_id, current_user)
+            _save_message(sb, session_id, request.case_id, "user", sanitized_message)
+            case_context = _fetch_case_context(sb, request.case_id, sanitized_message)
 
         system_prompt = SYSTEM_PROMPT_BASE
         if case_context:
@@ -725,7 +731,7 @@ async def chat_sync(request: ChatRequest) -> ChatResponse:
         client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
         response = client.models.generate_content(
             model="gemini-2.5-flash-lite",
-            contents=[{"role": "USER", "parts": [{"text": request.message}]}],
+            contents=[{"role": "USER", "parts": [{"text": sanitized_message}]}],
             config={"system_instruction": system_prompt, "temperature": 0.2},
         )
 
@@ -733,7 +739,7 @@ async def chat_sync(request: ChatRequest) -> ChatResponse:
 
         if sb:
             _save_message(
-                sb, request.session_id, request.case_id,
+                sb, session_id, request.case_id,
                 "assistant", content, agent_name="lead_orchestrator"
             )
 
@@ -758,6 +764,26 @@ async def get_chat_history(
     if not sb:
         return {"messages": []}
     try:
+        # T-07 FIX: Verify the session belongs to a case owned by the requesting user
+        session = (
+            sb.table("chat_sessions")
+            .select("case_id")
+            .eq("id", session_id)
+            .maybe_single()
+            .execute()
+        )
+        if session.data:
+            case = (
+                sb.table("cases")
+                .select("user_id")
+                .eq("id", session.data["case_id"])
+                .maybe_single()
+                .execute()
+            )
+            auth_enabled = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
+            if auth_enabled and (not case.data or case.data.get("user_id") != current_user):
+                raise HTTPException(status_code=403, detail="Access denied to this session.")
+
         result = (
             sb.table("chat_messages")
             .select("id, role, content, agent_name, citations, created_at")
@@ -766,5 +792,7 @@ async def get_chat_history(
             .execute()
         )
         return {"messages": result.data or []}
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
