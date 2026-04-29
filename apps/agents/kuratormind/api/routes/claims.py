@@ -141,7 +141,7 @@ async def update_claim(
     update_data["verified_by"] = current_user
     
     if update_data.get("status") == "verified":
-        update_data["verified_at"] = datetime.now().isoformat()
+        update_data["verified_at"] = datetime.now(timezone.utc).isoformat()
     
     try:
         # Verify claim exists and belongs to a case owned by current_user
