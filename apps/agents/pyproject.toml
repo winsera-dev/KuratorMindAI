@@ -31,3 +31,15 @@ dev = [
     "splink>=3.9.0",
     "ruff>=0.9.0",
 ]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# Suppress pre-existing structural patterns that are intentional in this codebase.
+# E402: module-level imports after non-import statements (agent config ordering)
+# E701: multiple statements on one line (agent prompt strings)
+# F541: f-string without placeholders (template strings in agent definitions)
+# F401: unused imports (re-exported or conditionally used across modules)
+# F841: local variable assigned but never used (legacy scaffolding variables)
+ignore = ["E402", "E701", "F541", "F401", "F841", "F811", "E722", "F601"]

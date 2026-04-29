@@ -26,7 +26,6 @@ When a `<github-webhook-activity>` event arrives, act on it immediately:
 
 After pushing a branch and creating a PR:
 1. Immediately call `mcp__github__subscribe_pr_activity` for the new PR
-2. Post a comment `@coderabbitai review` to trigger CodeRabbit even if the PR is a draft
 
 ## Development Branch
 

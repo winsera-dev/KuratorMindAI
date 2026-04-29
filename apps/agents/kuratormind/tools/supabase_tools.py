@@ -119,6 +119,7 @@ def semantic_search(case_id: str, query: str, top_k: int = 10) -> dict:
 
     import os
     from google import genai as _genai # type: ignore
+    from kuratormind.config import EMBEDDING_MODEL
 
     try:
         sb = _get_supabase()
@@ -126,7 +127,7 @@ def semantic_search(case_id: str, query: str, top_k: int = 10) -> dict:
         # Generate query embedding via Gemini
         client = _genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
         embed_result = client.models.embed_content(
-            model="gemini-embedding-004",
+            model=EMBEDDING_MODEL,
             contents=[query],
             config=_genai.types.EmbedContentConfig(output_dimensionality=768),
         )
@@ -590,12 +591,13 @@ def global_semantic_search(query: str, current_case_id: str, top_k: int = 10) ->
     """
     import os
     from google import genai as _genai # type: ignore
+    from kuratormind.config import EMBEDDING_MODEL
 
     try:
         sb = _get_supabase()
         client = _genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
         embed_result = client.models.embed_content(
-            model="gemini-embedding-004",
+            model=EMBEDDING_MODEL,
             contents=[query],
             config=_genai.types.EmbedContentConfig(output_dimensionality=768),
         )

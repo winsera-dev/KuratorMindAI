@@ -145,18 +145,20 @@ async def delete_audit_flag(
             raise HTTPException(status_code=404, detail="Audit flag not found.")
 
         case_owner = (existing.data.get("cases") or {}).get("user_id")
-        if case_owner and case_owner != current_user:
+        if not case_owner or case_owner != current_user:
             raise HTTPException(status_code=403, detail="Access denied.")
 
+        old_snapshot = dict(existing.data)
         now_str = datetime.now(timezone.utc).isoformat()
         sb.table("audit_flags").update({"deleted_at": now_str}).eq("id", flag_id).execute()
 
         try:
-            h = calculate_forensic_hash(flag_id, current_user, "deleted", new_value={"deleted_at": now_str})
+            h = calculate_forensic_hash(flag_id, current_user, "deleted",
+                                        old_value=old_snapshot, new_value={"deleted_at": now_str})
             sb.table("forensic_audit_log").insert({
                 "entity_type": "audit_flag", "entity_id": flag_id,
                 "action": "deleted", "actor_type": "user", "actor_id": current_user,
-                "new_value": {"deleted_at": now_str}, "evidence_hash": h,
+                "old_value": old_snapshot, "new_value": {"deleted_at": now_str}, "evidence_hash": h,
             }).execute()
         except Exception as log_exc:
             logger.warning("Forensic logging failed: %s", log_exc)
@@ -187,7 +189,7 @@ async def update_audit_flag(
             raise HTTPException(status_code=404, detail="Audit flag not found.")
         
         case_owner = (existing.data[0].get("cases") or {}).get("user_id")
-        if case_owner and case_owner != current_user:
+        if not case_owner or case_owner != current_user:
             raise HTTPException(status_code=403, detail="Access denied.")
             
         result = sb.table("audit_flags")\

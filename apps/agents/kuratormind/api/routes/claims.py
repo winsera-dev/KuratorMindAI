@@ -244,30 +244,28 @@ async def get_claims_summary(
         raise HTTPException(status_code=403, detail="Access denied to this case.")
 
     try:
-        claims_res = sb.table("claims").select("claim_type, claim_amount, status").eq("case_id", case_id).is_("deleted_at", "null").execute()
+        claims_res = sb.table("claims").select("claim_type, claim_amount, status, currency").eq("case_id", case_id).is_("deleted_at", "null").execute()
         claims = claims_res.data or []
 
-        from decimal import Decimal
         by_type: Dict[str, Dict[str, Any]] = {}
-        total_amount = Decimal("0.0")
-        for c in claims:
-            ctype = c.get("claim_type") or "unknown"
-            amount = Decimal(str(c.get("claim_amount") or 0))
-            total_amount += amount
-            if ctype not in by_type:
-                by_type[ctype] = {"count": 0, "total_amount": Decimal("0.0")}
-            by_type[ctype]["count"] += 1
-            by_type[ctype]["total_amount"] += amount
-
+        totals_by_currency: Dict[str, Decimal] = {}
         by_status: Dict[str, int] = {}
         for c in claims:
+            ctype = c.get("claim_type") or "unknown"
+            currency = c.get("currency") or "IDR"
+            amount = Decimal(str(c.get("claim_amount") or 0))
+            if ctype not in by_type:
+                by_type[ctype] = {"count": 0, "total_amount": Decimal("0")}
+            by_type[ctype]["count"] += 1
+            by_type[ctype]["total_amount"] += amount
+            totals_by_currency[currency] = totals_by_currency.get(currency, Decimal("0")) + amount
             s = c.get("status") or "unknown"
             by_status[s] = by_status.get(s, 0) + 1
 
         return {
             "case_id": case_id,
             "total_claims": len(claims),
-            "total_amount_idr": float(total_amount),
+            "totals_by_currency": {k: float(v) for k, v in totals_by_currency.items()},
             "by_type": {k: {"count": v["count"], "total_amount": float(v["total_amount"])} for k, v in by_type.items()},
             "by_status": by_status,
         }
@@ -284,23 +282,25 @@ async def delete_claim(
     """Soft-delete a claim with forensic audit logging (evidence spoliation prevention)."""
     sb = _get_supabase()
     try:
-        existing = sb.table("claims").select("id, case_id, cases(user_id)").eq("id", claim_id).single().execute()
+        existing = sb.table("claims").select("id, case_id, cases(user_id)").eq("id", claim_id).maybe_single().execute()
         if not existing.data:
             raise HTTPException(status_code=404, detail="Claim not found.")
 
         case_owner = (existing.data.get("cases") or {}).get("user_id")
-        if case_owner and case_owner != current_user:
+        if not case_owner or case_owner != current_user:
             raise HTTPException(status_code=403, detail="Access denied.")
 
+        old_snapshot = dict(existing.data)
         now_str = datetime.now(timezone.utc).isoformat()
         sb.table("claims").update({"deleted_at": now_str}).eq("id", claim_id).execute()
 
         try:
-            h = calculate_forensic_hash(claim_id, current_user, "deleted", new_value={"deleted_at": now_str})
+            h = calculate_forensic_hash(claim_id, current_user, "deleted",
+                                        old_value=old_snapshot, new_value={"deleted_at": now_str})
             sb.table("forensic_audit_log").insert({
                 "entity_type": "claim", "entity_id": claim_id,
                 "action": "deleted", "actor_type": "user", "actor_id": current_user,
-                "new_value": {"deleted_at": now_str}, "evidence_hash": h,
+                "old_value": old_snapshot, "new_value": {"deleted_at": now_str}, "evidence_hash": h,
             }).execute()
         except Exception as log_exc:
             logger.warning("Forensic logging failed: %s", log_exc)
