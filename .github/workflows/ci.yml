@@ -1,0 +1,83 @@
+name: KuratorMind CI
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Job 1: Frontend — Lint · Type Check · Build
+  # ──────────────────────────────────────────────
+  frontend:
+    name: "Frontend — Lint & Type Check"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: .   # install from workspace root
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type Check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+        env:
+          # Next.js build needs placeholder env vars to pass without a real .env
+          NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder"
+
+  # ──────────────────────────────────────────────
+  # Job 2: Backend — Lint · Deterministic Tests
+  # ──────────────────────────────────────────────
+  backend:
+    name: "Backend — Lint & Tests"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/agents
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: apps/agents/pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check kuratormind/
+
+      - name: Tests — Compliance & Accounting (deterministic, no external services)
+        run: |
+          pytest \
+            tests/test_compliance.py \
+            tests/test_benford.py \
+            tests/test_audit_logic.py \
+            -v --tb=short
+        env:
+          # Stub values so imports that read env vars at module level don't crash
+          SUPABASE_URL: "https://placeholder.supabase.co"
+          SUPABASE_SERVICE_ROLE_KEY: "placeholder"
+          GOOGLE_API_KEY: "placeholder"
