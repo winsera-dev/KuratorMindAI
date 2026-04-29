@@ -1,0 +1,7 @@
+reviews:
+  # Review draft PRs so the full AI loop runs immediately on push,
+  # not only after the PR is marked ready.
+  auto_review:
+    enabled: true
+    drafts: true
+  review_status: true
