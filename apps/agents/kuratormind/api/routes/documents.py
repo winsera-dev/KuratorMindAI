@@ -21,6 +21,30 @@ from kuratormind.services.ingestion import ingest_document
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+GLOBAL_CASE_ID = "00000000-0000-0000-0000-000000000000"
+
+def _verify_case_ownership(sb: Client, case_id: str, current_user: str):
+    """
+    Ensures the user has permission to access the case.
+    Handles global case bypass and dev mode (AUTH_ENABLED=false).
+    Raises HTTPException 403 if access is denied.
+    """
+    if case_id == GLOBAL_CASE_ID:
+        return
+
+    auth_enabled = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
+    query = sb.table("cases").select("user_id").eq("id", case_id)
+
+    if not auth_enabled:
+        # In dev mode, allow access if owned by current_user OR orphaned
+        query = query.or_(f"user_id.eq.{current_user},user_id.is.null")
+    else:
+        query = query.eq("user_id", current_user)
+
+    case = query.maybe_single().execute()
+    if not case.data:
+        raise HTTPException(status_code=403, detail="Access denied to this case.")
+
 ALLOWED_TYPES = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -90,10 +114,8 @@ async def upload_document(
     import hashlib
     sb = _get_supabase()
 
-    # T-05 FIX: Verify the target case belongs to the authenticated user
-    target_case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
-    if not target_case.data or target_case.data.get("user_id") != current_user:
-        raise HTTPException(status_code=403, detail="Access denied to this case.")
+    # Verify ownership of target case
+    _verify_case_ownership(sb, case_id, current_user)
 
     # Check for duplicate file using SHA-256
     file_hash = hashlib.sha256(file_bytes).hexdigest()
@@ -170,17 +192,7 @@ async def list_documents(
     """
     sb = _get_supabase()
     try:
-        # System Case Bypass: Always allow the global case for registry visibility
-        GLOBAL_ID = "00000000-0000-0000-0000-000000000000"
-        
-        if case_id == GLOBAL_ID:
-            # Always allowed for all Kurators
-            pass
-        else:
-            # Ownership check: verify case belongs to current_user
-            case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
-            if not case.data or case.data.get("user_id") != current_user:
-                raise HTTPException(status_code=403, detail="Access denied to this case.")
+        _verify_case_ownership(sb, case_id, current_user)
 
         result = (
             sb.table("case_documents")
@@ -210,21 +222,18 @@ async def delete_document(
         # Fetch the document and verify ownership via the parent case
         doc = (
             sb.table("case_documents")
-            .select("file_path, case_id, cases(user_id)")
+            .select("file_path, case_id")
             .eq("id", document_id)
-            .single()
+            .maybe_single()
             .execute()
         )
         if not doc.data:
             raise HTTPException(status_code=404, detail="Document not found.")
 
-        # Ownership check: the parent case must belong to the requesting user
-        case_owner = (doc.data.get("cases") or {}).get("user_id")
-        if case_owner and case_owner != current_user:
-            raise HTTPException(status_code=403, detail="Access denied.")
+        case_id = doc.data.get("case_id")
+        _verify_case_ownership(sb, case_id, current_user)
 
         storage_path = doc.data.get("file_path")
-        case_id = doc.data.get("case_id")
 
         # T-18 FIX: Soft-delete strategy to prevent evidence spoliation
         from datetime import datetime, timezone
@@ -302,22 +311,14 @@ async def get_document_signed_url(
             sb.table("case_documents")
             .select("file_path, file_name, file_type, case_id")
             .eq("id", document_id)
-            .single()
+            .maybe_single()
             .execute()
         )
         if not doc.data:
             raise HTTPException(status_code=404, detail="Document not found.")
 
-        # T-04 FIX: Verify the parent case belongs to the requesting user
-        case = (
-            sb.table("cases")
-            .select("user_id")
-            .eq("id", doc.data["case_id"])
-            .maybe_single()
-            .execute()
-        )
-        if not case.data or case.data.get("user_id") != current_user:
-            raise HTTPException(status_code=403, detail="Access denied.")
+        case_id = doc.data["case_id"]
+        _verify_case_ownership(sb, case_id, current_user)
 
         file_path = doc.data.get("file_path")
         if not file_path:

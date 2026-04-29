@@ -69,6 +69,32 @@ def test_cross_tenant_access_denied():
     finally:
         app.dependency_overrides = {}
 
+def test_document_upload_cross_tenant_denied():
+    """Verify User B cannot upload documents to User A's case."""
+    app.dependency_overrides[get_current_user] = lambda: TEST_USER_B
+
+    # Save original auth state
+    original_auth = os.environ.get("AUTH_ENABLED", "false")
+    os.environ["AUTH_ENABLED"] = "true"
+
+    try:
+        # Create a dummy file for upload
+        import io
+        file_content = b"fake pdf content"
+        file = io.BytesIO(file_content)
+
+        response = client.post(
+            "/api/v1/documents/upload",
+            data={"case_id": EXISTING_CASE_A},
+            files={"file": ("test.pdf", file, "application/pdf")}
+        )
+        # Should return 403 Forbidden
+        assert response.status_code == 403
+        assert "Access denied" in response.json()["detail"]
+    finally:
+        app.dependency_overrides = {}
+        os.environ["AUTH_ENABLED"] = original_auth
+
 def test_chat_endpoint_requires_case_id():
     """Verify chat endpoint validates input."""
     app.dependency_overrides[get_current_user] = lambda: TEST_USER_A
