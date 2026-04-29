@@ -27,8 +27,13 @@ def get_current_user(auth: Optional[HTTPAuthorizationCredentials] = Depends(secu
     
     if not auth_enabled:
         # Return a valid user ID for local development to avoid FK violations
-        # This ID is verified to exist in the database
-        return os.environ.get("DEV_USER_ID", "d1122f85-142f-411b-879f-7d15998f3304")
+        dev_user_id = os.environ.get("DEV_USER_ID")
+        if not dev_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="DEV_USER_ID must be set when AUTH_ENABLED is false",
+            )
+        return dev_user_id
 
     if not auth:
         raise HTTPException(

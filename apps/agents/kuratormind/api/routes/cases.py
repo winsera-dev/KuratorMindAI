@@ -96,7 +96,7 @@ async def list_cases(
     current_user: Annotated[str, Depends(get_current_user)],
 ):
     """List all cases for the authenticated user."""
-    auth_enabled = os.environ.get("AUTH_ENABLED", "false").lower() == "true"
+    auth_enabled = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
     
     try:
         sb = _get_supabase()
@@ -312,7 +312,7 @@ async def get_case(
     current_user: Annotated[str, Depends(get_current_user)],
 ):
     """Fetch a single forensic case — only if it belongs to the authenticated user."""
-    auth_enabled = os.environ.get("AUTH_ENABLED", "false").lower() == "true"
+    auth_enabled = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
     sb = _get_supabase()
     
     try:
