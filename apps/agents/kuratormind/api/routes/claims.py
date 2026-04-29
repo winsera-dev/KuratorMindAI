@@ -247,14 +247,15 @@ async def get_claims_summary(
         claims_res = sb.table("claims").select("claim_type, claim_amount, status").eq("case_id", case_id).is_("deleted_at", "null").execute()
         claims = claims_res.data or []
 
+        from decimal import Decimal
         by_type: Dict[str, Dict[str, Any]] = {}
-        total_amount = Decimal("0")
+        total_amount = Decimal("0.0")
         for c in claims:
             ctype = c.get("claim_type") or "unknown"
             amount = Decimal(str(c.get("claim_amount") or 0))
             total_amount += amount
             if ctype not in by_type:
-                by_type[ctype] = {"count": 0, "total_amount": Decimal("0")}
+                by_type[ctype] = {"count": 0, "total_amount": Decimal("0.0")}
             by_type[ctype]["count"] += 1
             by_type[ctype]["total_amount"] += amount
 
