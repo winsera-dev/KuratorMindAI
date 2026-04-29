@@ -242,34 +242,41 @@ async def delete_document(
 
         # 2. Soft-delete derived findings (Claims and Audit Flags)
         try:
-            claims_to_del = sb.table("claims").select("id").eq("metadata->>source_document_id", document_id).execute()
-            for c in claims_to_del.data:
-                sb.table("claims").update({"deleted_at": now_str}).eq("id", c["id"]).execute()
+            claims_res = sb.table("claims").select("id").eq("metadata->>source_document_id", document_id).execute()
+            claim_ids = [c["id"] for c in claims_res.data]
+            if claim_ids:
+                sb.table("claims").update({"deleted_at": now_str}).in_("id", claim_ids).execute()
                 
-                claim_hash = calculate_forensic_hash(c["id"], current_user, "deleted", new_value={"deleted_at": now_str})
-                sb.table("forensic_audit_log").insert({
-                    "entity_type": "claim", "entity_id": c["id"], 
-                    "action": "deleted", "actor_type": "system", "actor_id": current_user,
-                    "evidence_hash": claim_hash
-                }).execute()
+                claim_logs = []
+                for cid in claim_ids:
+                    claim_hash = calculate_forensic_hash(cid, current_user, "deleted", new_value={"deleted_at": now_str})
+                    claim_logs.append({
+                        "entity_type": "claim", "entity_id": cid,
+                        "action": "deleted", "actor_type": "system", "actor_id": current_user,
+                        "evidence_hash": claim_hash
+                    })
+                sb.table("forensic_audit_log").insert(claim_logs).execute()
             
             if case_id:
                 flags_res = sb.table("audit_flags").select("id, evidence").eq("case_id", case_id).execute()
+                linked_flag_ids = []
                 for f in flags_res.data:
                     evidence = f.get("evidence") or []
-                    is_linked = any(
-                        isinstance(e, dict) and e.get("source_document_id") == document_id 
-                        for e in evidence
-                    )
-                    if is_linked:
-                        sb.table("audit_flags").update({"deleted_at": now_str}).eq("id", f["id"]).execute()
-                        
-                        flag_hash = calculate_forensic_hash(f["id"], current_user, "deleted", new_value={"deleted_at": now_str})
-                        sb.table("forensic_audit_log").insert({
-                            "entity_type": "audit_flag", "entity_id": f["id"], 
+                    if any(isinstance(e, dict) and e.get("source_document_id") == document_id for e in evidence):
+                        linked_flag_ids.append(f["id"])
+
+                if linked_flag_ids:
+                    sb.table("audit_flags").update({"deleted_at": now_str}).in_("id", linked_flag_ids).execute()
+
+                    flag_logs = []
+                    for fid in linked_flag_ids:
+                        flag_hash = calculate_forensic_hash(fid, current_user, "deleted", new_value={"deleted_at": now_str})
+                        flag_logs.append({
+                            "entity_type": "audit_flag", "entity_id": fid,
                             "action": "deleted", "actor_type": "system", "actor_id": current_user,
                             "evidence_hash": flag_hash
-                        }).execute()
+                        })
+                    sb.table("forensic_audit_log").insert(flag_logs).execute()
             
             logger.info("Systemic soft-cleanup complete for document %s", document_id)
         except Exception as cleanup_exc:
