@@ -101,7 +101,7 @@ def get_document_summary(document_id: str) -> dict:
 def semantic_search(case_id: str, query: str, top_k: int = 10) -> dict:
     """Perform semantic search across all document chunks in a case.
 
-    Embeds the query with Gemini gemini-embedding-001 and calls the
+    Embeds the query with Gemini gemini-embedding-004 and calls the
     match_document_chunks RPC for cosine-similarity retrieval (pgvector).
     Falls back to ilike text search if the case has no embeddings yet.
 
@@ -126,7 +126,7 @@ def semantic_search(case_id: str, query: str, top_k: int = 10) -> dict:
         # Generate query embedding via Gemini
         client = _genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
         embed_result = client.models.embed_content(
-            model="gemini-embedding-001",
+            model="gemini-embedding-004",
             contents=[query],
             config=_genai.types.EmbedContentConfig(output_dimensionality=768),
         )
@@ -595,7 +595,7 @@ def global_semantic_search(query: str, current_case_id: str, top_k: int = 10) ->
         sb = _get_supabase()
         client = _genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
         embed_result = client.models.embed_content(
-            model="gemini-embedding-001",
+            model="gemini-embedding-004",
             contents=[query],
             config=_genai.types.EmbedContentConfig(output_dimensionality=768),
         )

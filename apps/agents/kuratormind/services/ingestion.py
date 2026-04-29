@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 1500        # characters per chunk
 CHUNK_OVERLAP = 200      # characters of overlap between consecutive chunks
-EMBEDDING_MODEL = "gemini-embedding-001"
+EMBEDDING_MODEL = "gemini-embedding-004"
 EMBEDDING_BATCH_SIZE = 20  # embed this many chunks per API call
 
 # ---------------------------------------------------------------------------

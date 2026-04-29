@@ -184,13 +184,128 @@ async def update_claim(
         raise HTTPException(status_code=500, detail=str(exc))
 
 @router.post("/claims/verify", response_model=dict)
-async def verify_claim(
+async def verify_claims_eligibility(
     request: dict,
     current_user: Annotated[str, Depends(get_current_user)],
 ):
-    """Placeholder for claim verification route to satisfy tests."""
+    """
+    Run UU 37/2004 bankruptcy eligibility check against all claims in a case.
+    Evaluates Article 2 (creditor plurality) and Article 8 (debt maturity/proof).
+    """
+    from kuratormind.services.compliance import check_bankruptcy_eligibility
+
     case_id = request.get("case_id")
-    if not case_id or case_id == "00000000-0000-0000-0000-000000000000":
-        raise HTTPException(status_code=404, detail="Case not found")
-    
-    return {"status": "verified", "confidence": 0.95}
+    if not case_id:
+        raise HTTPException(status_code=400, detail="case_id is required.")
+
+    try:
+        import uuid as _uuid
+        _uuid.UUID(case_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid case_id format.")
+
+    sb = _get_supabase()
+
+    GLOBAL_ID = "00000000-0000-0000-0000-000000000000"
+    if case_id == GLOBAL_ID:
+        raise HTTPException(status_code=400, detail="Cannot verify the global system case.")
+
+    case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+    if not case.data or case.data.get("user_id") != current_user:
+        raise HTTPException(status_code=403, detail="Access denied to this case.")
+
+    claims_res = sb.table("claims").select("*").eq("case_id", case_id).is_("deleted_at", "null").execute()
+    claims = claims_res.data or []
+
+    for c in claims:
+        c["creditor_name"] = decrypt_pii(c.get("creditor_name"))
+
+    result = check_bankruptcy_eligibility(claims)
+    return {"case_id": case_id, "claim_count": len(claims), **result}
+
+
+@router.get("/claims/{case_id}/summary", response_model=dict)
+async def get_claims_summary(
+    case_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
+    """Return aggregate claim statistics for a case: totals by type and overall IDR sum."""
+    try:
+        import uuid as _uuid
+        _uuid.UUID(case_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Case ID format.")
+
+    sb = _get_supabase()
+
+    case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+    if not case.data or case.data.get("user_id") != current_user:
+        raise HTTPException(status_code=403, detail="Access denied to this case.")
+
+    try:
+        claims_res = sb.table("claims").select("claim_type, claim_amount, status").eq("case_id", case_id).is_("deleted_at", "null").execute()
+        claims = claims_res.data or []
+
+        by_type: Dict[str, Dict[str, Any]] = {}
+        total_amount = 0.0
+        for c in claims:
+            ctype = c.get("claim_type") or "unknown"
+            amount = float(c.get("claim_amount") or 0)
+            total_amount += amount
+            if ctype not in by_type:
+                by_type[ctype] = {"count": 0, "total_amount": 0.0}
+            by_type[ctype]["count"] += 1
+            by_type[ctype]["total_amount"] += amount
+
+        by_status: Dict[str, int] = {}
+        for c in claims:
+            s = c.get("status") or "unknown"
+            by_status[s] = by_status.get(s, 0) + 1
+
+        return {
+            "case_id": case_id,
+            "total_claims": len(claims),
+            "total_amount_idr": total_amount,
+            "by_type": by_type,
+            "by_status": by_status,
+        }
+    except Exception as exc:
+        logger.error("Claims summary failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/claims/{claim_id}", response_model=dict)
+async def delete_claim(
+    claim_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
+    """Soft-delete a claim with forensic audit logging (evidence spoliation prevention)."""
+    sb = _get_supabase()
+    try:
+        existing = sb.table("claims").select("id, case_id, cases(user_id)").eq("id", claim_id).single().execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Claim not found.")
+
+        case_owner = (existing.data.get("cases") or {}).get("user_id")
+        if case_owner and case_owner != current_user:
+            raise HTTPException(status_code=403, detail="Access denied.")
+
+        now_str = datetime.utcnow().isoformat()
+        sb.table("claims").update({"deleted_at": now_str}).eq("id", claim_id).execute()
+
+        try:
+            h = calculate_forensic_hash(claim_id, current_user, "deleted", new_value={"deleted_at": now_str})
+            sb.table("forensic_audit_log").insert({
+                "entity_type": "claim", "entity_id": claim_id,
+                "action": "deleted", "actor_type": "user", "actor_id": current_user,
+                "new_value": {"deleted_at": now_str}, "evidence_hash": h,
+            }).execute()
+        except Exception as log_exc:
+            logger.warning("Forensic logging failed: %s", log_exc)
+
+        return {"success": True, "claim_id": claim_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Delete claim failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
