@@ -243,7 +243,7 @@ async def delete_document(
         # 2. Soft-delete derived findings (Claims and Audit Flags)
         try:
             claims_res = sb.table("claims").select("id").eq("metadata->>source_document_id", document_id).execute()
-            claim_ids = [c["id"] for c in claims_res.data]
+            claim_ids = [c["id"] for c in claims_res.data] if claims_res.data else []
             if claim_ids:
                 sb.table("claims").update({"deleted_at": now_str}).in_("id", claim_ids).execute()
                 
