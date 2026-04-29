@@ -7,7 +7,8 @@ Handles creditor claim management, verification, and forensic audit status.
 import logging
 import os
 from typing import List, Optional, Dict, Any, Annotated
-from datetime import datetime
+from datetime import datetime, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
@@ -247,13 +248,13 @@ async def get_claims_summary(
         claims = claims_res.data or []
 
         by_type: Dict[str, Dict[str, Any]] = {}
-        total_amount = 0.0
+        total_amount = Decimal("0")
         for c in claims:
             ctype = c.get("claim_type") or "unknown"
-            amount = float(c.get("claim_amount") or 0)
+            amount = Decimal(str(c.get("claim_amount") or 0))
             total_amount += amount
             if ctype not in by_type:
-                by_type[ctype] = {"count": 0, "total_amount": 0.0}
+                by_type[ctype] = {"count": 0, "total_amount": Decimal("0")}
             by_type[ctype]["count"] += 1
             by_type[ctype]["total_amount"] += amount
 
@@ -265,8 +266,8 @@ async def get_claims_summary(
         return {
             "case_id": case_id,
             "total_claims": len(claims),
-            "total_amount_idr": total_amount,
-            "by_type": by_type,
+            "total_amount_idr": float(total_amount),
+            "by_type": {k: {"count": v["count"], "total_amount": float(v["total_amount"])} for k, v in by_type.items()},
             "by_status": by_status,
         }
     except Exception as exc:
@@ -290,7 +291,7 @@ async def delete_claim(
         if case_owner and case_owner != current_user:
             raise HTTPException(status_code=403, detail="Access denied.")
 
-        now_str = datetime.utcnow().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         sb.table("claims").update({"deleted_at": now_str}).eq("id", claim_id).execute()
 
         try:

@@ -7,7 +7,7 @@ Handles forensic red flags, logical contradictions, and legal risk monitoring.
 import logging
 import os
 from typing import List, Optional, Dict, Any, Annotated
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
@@ -140,15 +140,15 @@ async def delete_audit_flag(
     """Soft-delete an audit flag with forensic audit logging."""
     sb = _get_supabase()
     try:
-        existing = sb.table("audit_flags").select("id, case_id, cases(user_id)").eq("id", flag_id).execute()
+        existing = sb.table("audit_flags").select("id, case_id, cases(user_id)").eq("id", flag_id).maybe_single().execute()
         if not existing.data:
             raise HTTPException(status_code=404, detail="Audit flag not found.")
 
-        case_owner = (existing.data[0].get("cases") or {}).get("user_id")
+        case_owner = (existing.data.get("cases") or {}).get("user_id")
         if case_owner and case_owner != current_user:
             raise HTTPException(status_code=403, detail="Access denied.")
 
-        now_str = datetime.now().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         sb.table("audit_flags").update({"deleted_at": now_str}).eq("id", flag_id).execute()
 
         try:
