@@ -94,7 +94,7 @@ _AUTH_SKIP_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/agents"}
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     """Optional JWT gate. Enforced only when AUTH_ENABLED=true in .env."""
-    auth_enabled = os.getenv("AUTH_ENABLED", "false").lower() == "true"
+    auth_enabled = os.getenv("AUTH_ENABLED", "true").lower() == "true"
 
     # If the flag is off, let everything through — no performance cost
     if not auth_enabled or request.url.path in _AUTH_SKIP_PATHS:
