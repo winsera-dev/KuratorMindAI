@@ -7,7 +7,8 @@ Handles creditor claim management, verification, and forensic audit status.
 import logging
 import os
 from typing import List, Optional, Dict, Any, Annotated
-from datetime import datetime
+from datetime import datetime, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
@@ -140,7 +141,7 @@ async def update_claim(
     update_data["verified_by"] = current_user
     
     if update_data.get("status") == "verified":
-        update_data["verified_at"] = datetime.now().isoformat()
+        update_data["verified_at"] = datetime.now(timezone.utc).isoformat()
     
     try:
         # Verify claim exists and belongs to a case owned by current_user
@@ -184,13 +185,129 @@ async def update_claim(
         raise HTTPException(status_code=500, detail=str(exc))
 
 @router.post("/claims/verify", response_model=dict)
-async def verify_claim(
+async def verify_claims_eligibility(
     request: dict,
     current_user: Annotated[str, Depends(get_current_user)],
 ):
-    """Placeholder for claim verification route to satisfy tests."""
+    """
+    Run UU 37/2004 bankruptcy eligibility check against all claims in a case.
+    Evaluates Article 2 (creditor plurality) and Article 8 (debt maturity/proof).
+    """
+    from kuratormind.services.compliance import check_bankruptcy_eligibility
+
     case_id = request.get("case_id")
-    if not case_id or case_id == "00000000-0000-0000-0000-000000000000":
-        raise HTTPException(status_code=404, detail="Case not found")
-    
-    return {"status": "verified", "confidence": 0.95}
+    if not case_id:
+        raise HTTPException(status_code=400, detail="case_id is required.")
+
+    try:
+        import uuid as _uuid
+        _uuid.UUID(case_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid case_id format.")
+
+    sb = _get_supabase()
+
+    GLOBAL_ID = "00000000-0000-0000-0000-000000000000"
+    if case_id == GLOBAL_ID:
+        raise HTTPException(status_code=400, detail="Cannot verify the global system case.")
+
+    case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+    if not case.data or case.data.get("user_id") != current_user:
+        raise HTTPException(status_code=403, detail="Access denied to this case.")
+
+    claims_res = sb.table("claims").select("*").eq("case_id", case_id).is_("deleted_at", "null").execute()
+    claims = claims_res.data or []
+
+    for c in claims:
+        c["creditor_name"] = decrypt_pii(c.get("creditor_name"))
+
+    result = check_bankruptcy_eligibility(claims)
+    return {"case_id": case_id, "claim_count": len(claims), **result}
+
+
+@router.get("/claims/{case_id}/summary", response_model=dict)
+async def get_claims_summary(
+    case_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
+    """Return aggregate claim statistics for a case: totals by type and overall IDR sum."""
+    try:
+        import uuid as _uuid
+        _uuid.UUID(case_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Case ID format.")
+
+    sb = _get_supabase()
+
+    case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+    if not case.data or case.data.get("user_id") != current_user:
+        raise HTTPException(status_code=403, detail="Access denied to this case.")
+
+    try:
+        claims_res = sb.table("claims").select("claim_type, claim_amount, status, currency").eq("case_id", case_id).is_("deleted_at", "null").execute()
+        claims = claims_res.data or []
+
+        by_type: Dict[str, Dict[str, Any]] = {}
+        totals_by_currency: Dict[str, Decimal] = {}
+        by_status: Dict[str, int] = {}
+        for c in claims:
+            ctype = c.get("claim_type") or "unknown"
+            currency = c.get("currency") or "IDR"
+            amount = Decimal(str(c.get("claim_amount") or 0))
+            if ctype not in by_type:
+                by_type[ctype] = {"count": 0, "total_amount": Decimal("0")}
+            by_type[ctype]["count"] += 1
+            by_type[ctype]["total_amount"] += amount
+            totals_by_currency[currency] = totals_by_currency.get(currency, Decimal("0")) + amount
+            s = c.get("status") or "unknown"
+            by_status[s] = by_status.get(s, 0) + 1
+
+        return {
+            "case_id": case_id,
+            "total_claims": len(claims),
+            "totals_by_currency": {k: float(v) for k, v in totals_by_currency.items()},
+            "by_type": {k: {"count": v["count"], "total_amount": float(v["total_amount"])} for k, v in by_type.items()},
+            "by_status": by_status,
+        }
+    except Exception as exc:
+        logger.error("Claims summary failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/claims/{claim_id}", response_model=dict)
+async def delete_claim(
+    claim_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
+    """Soft-delete a claim with forensic audit logging (evidence spoliation prevention)."""
+    sb = _get_supabase()
+    try:
+        existing = sb.table("claims").select("id, case_id, cases(user_id)").eq("id", claim_id).maybe_single().execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Claim not found.")
+
+        case_owner = (existing.data.get("cases") or {}).get("user_id")
+        if not case_owner or case_owner != current_user:
+            raise HTTPException(status_code=403, detail="Access denied.")
+
+        old_snapshot = dict(existing.data)
+        now_str = datetime.now(timezone.utc).isoformat()
+        sb.table("claims").update({"deleted_at": now_str}).eq("id", claim_id).execute()
+
+        try:
+            h = calculate_forensic_hash(claim_id, current_user, "deleted",
+                                        old_value=old_snapshot, new_value={"deleted_at": now_str})
+            sb.table("forensic_audit_log").insert({
+                "entity_type": "claim", "entity_id": claim_id,
+                "action": "deleted", "actor_type": "user", "actor_id": current_user,
+                "old_value": old_snapshot, "new_value": {"deleted_at": now_str}, "evidence_hash": h,
+            }).execute()
+        except Exception as log_exc:
+            logger.warning("Forensic logging failed: %s", log_exc)
+
+        return {"success": True, "claim_id": claim_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Delete claim failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))

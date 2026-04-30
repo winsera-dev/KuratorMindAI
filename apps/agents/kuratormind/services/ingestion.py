@@ -23,6 +23,7 @@ import openpyxl  # type: ignore
 from google import genai  # type: ignore
 from supabase import create_client, Client  # type: ignore
 from kuratormind.services.security import scrub_pii_for_llm  # noqa: F401 — PII scrubber for LLM calls
+from kuratormind.config import EMBEDDING_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 1500        # characters per chunk
 CHUNK_OVERLAP = 200      # characters of overlap between consecutive chunks
-EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_BATCH_SIZE = 20  # embed this many chunks per API call
 
 # ---------------------------------------------------------------------------

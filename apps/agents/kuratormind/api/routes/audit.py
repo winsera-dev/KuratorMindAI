@@ -7,7 +7,7 @@ Handles forensic red flags, logical contradictions, and legal risk monitoring.
 import logging
 import os
 from typing import List, Optional, Dict, Any, Annotated
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
@@ -91,6 +91,86 @@ async def list_audit_flags(
         logger.error("List audit flags failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
 
+@router.get("/audit/flags/{case_id}/summary", response_model=dict)
+async def get_audit_flags_summary(
+    case_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
+    """Return audit flag counts grouped by severity for a case."""
+    sb = _get_supabase()
+
+    GLOBAL_ID = "00000000-0000-0000-0000-000000000000"
+    if case_id != GLOBAL_ID:
+        case = sb.table("cases").select("user_id").eq("id", case_id).maybe_single().execute()
+        if not case.data or case.data.get("user_id") != current_user:
+            raise HTTPException(status_code=403, detail="Access denied to this case.")
+
+    try:
+        result = sb.table("audit_flags").select("severity, flag_type, resolved").eq("case_id", case_id).is_("deleted_at", "null").execute()
+        flags = result.data or []
+
+        by_severity: Dict[str, int] = {}
+        by_type: Dict[str, int] = {}
+        unresolved = 0
+        for f in flags:
+            sev = f.get("severity") or "unknown"
+            ftype = f.get("flag_type") or "unknown"
+            by_severity[sev] = by_severity.get(sev, 0) + 1
+            by_type[ftype] = by_type.get(ftype, 0) + 1
+            if not f.get("resolved"):
+                unresolved += 1
+
+        return {
+            "case_id": case_id,
+            "total_flags": len(flags),
+            "unresolved_flags": unresolved,
+            "by_severity": by_severity,
+            "by_type": by_type,
+        }
+    except Exception as exc:
+        logger.error("Audit flags summary failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/audit/flags/{flag_id}", response_model=dict)
+async def delete_audit_flag(
+    flag_id: str,
+    current_user: Annotated[str, Depends(get_current_user)],
+):
+    """Soft-delete an audit flag with forensic audit logging."""
+    sb = _get_supabase()
+    try:
+        existing = sb.table("audit_flags").select("id, case_id, cases(user_id)").eq("id", flag_id).maybe_single().execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Audit flag not found.")
+
+        case_owner = (existing.data.get("cases") or {}).get("user_id")
+        if not case_owner or case_owner != current_user:
+            raise HTTPException(status_code=403, detail="Access denied.")
+
+        old_snapshot = dict(existing.data)
+        now_str = datetime.now(timezone.utc).isoformat()
+        sb.table("audit_flags").update({"deleted_at": now_str}).eq("id", flag_id).execute()
+
+        try:
+            h = calculate_forensic_hash(flag_id, current_user, "deleted",
+                                        old_value=old_snapshot, new_value={"deleted_at": now_str})
+            sb.table("forensic_audit_log").insert({
+                "entity_type": "audit_flag", "entity_id": flag_id,
+                "action": "deleted", "actor_type": "user", "actor_id": current_user,
+                "old_value": old_snapshot, "new_value": {"deleted_at": now_str}, "evidence_hash": h,
+            }).execute()
+        except Exception as log_exc:
+            logger.warning("Forensic logging failed: %s", log_exc)
+
+        return {"success": True, "flag_id": flag_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Delete audit flag failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.patch("/audit/flags/{flag_id}", response_model=AuditFlagResponse)
 async def update_audit_flag(
     flag_id: str, 
@@ -109,7 +189,7 @@ async def update_audit_flag(
             raise HTTPException(status_code=404, detail="Audit flag not found.")
         
         case_owner = (existing.data[0].get("cases") or {}).get("user_id")
-        if case_owner and case_owner != current_user:
+        if not case_owner or case_owner != current_user:
             raise HTTPException(status_code=403, detail="Access denied.")
             
         result = sb.table("audit_flags")\
