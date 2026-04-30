@@ -75,6 +75,7 @@ jobs:
             tests/test_compliance.py \
             tests/test_benford.py \
             tests/test_audit_logic.py \
+            tests/test_ingestion_pipeline.py \
             -v --tb=short
         env:
           # Stub values so imports that read env vars at module level don't crash
